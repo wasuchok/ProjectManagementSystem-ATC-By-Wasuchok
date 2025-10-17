@@ -1,0 +1,39 @@
+{
+    "employee": {
+        "employee_information": "Employee Information",
+        "admin": "Admin",
+        "can_create": "Can Create",
+        "employee": "Employee",
+        "username": "Username",
+        "password": "Password",
+        "email": "Email",
+        "fullname": "Fullname",
+        "department": "Team",
+        "position": "Position"
+    },
+    "please_fill_in_information": "Please fill in information....",
+    "modal": {
+        "are_you_sure": "Are you sure?",
+        "do_you_want_to_save_information": "Do you want to save information?"
+    },
+    "auth": {
+        "login": "Welcome to Login",
+        "btn_login": "login"
+    },
+    "alert": {
+        "error": "Error",
+        "alert_error": "The system has an error.",
+        "success": "Success!",
+        "alert_success": "The operation has been completed successfully 🎉"
+    },
+    "project": {
+        "create_title": "Create a project overview",
+        "create_content": "Get a unified view of activities from multiple teams to effectively plan, prioritize, and track your goals.",
+        "project_name": "Project Name",
+        "description": "Description",
+        "priority": "Priority",
+        "team": "Team",
+        "create": "Create",
+        "join_content": "Allow joining"
+    }
+}

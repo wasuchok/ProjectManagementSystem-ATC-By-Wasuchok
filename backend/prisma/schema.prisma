@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model user_account {
+  user_id             String                @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  username            String?               @db.VarChar(50)
+  password_hash       String?               @db.VarChar(255)
+  full_name           String?               @db.VarChar(255)
+  email               String?               @db.VarChar(255)
+  department          String                @db.VarChar(50)
+  position            String                @db.VarChar(50)
+  image               String?               @db.VarChar(255)
+  v_admin             Int?                  @default(0)
+  v_create            Int?                  @default(0)
+  status              Int?                  @default(0)
+  create_date         DateTime?             @default(now()) @db.DateTime(0)
+  create_by           String?               @db.Char(36)
+  refresh_token       String?               @db.VarChar(255)
+  sect                String?               @db.VarChar(10)
+  tb_project_members  tb_project_members[]
+  tb_project_projects tb_project_projects[]
+  user_account        user_account?         @relation("user_accountTouser_account", fields: [create_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_create_by")
+  other_user_account  user_account[]        @relation("user_accountTouser_account")
+
+  @@index([create_by], map: "fk_create_by")
+}
+
+model tb_project_members {
+  id                  Int                        @id @default(autoincrement())
+  project_id          Int?
+  user_id             String?                    @db.VarChar(255)
+  status              tb_project_members_status? @default(invited)
+  invited_by          String                     @db.VarChar(255)
+  is_active           Boolean?
+  joined_at           DateTime?                  @db.DateTime(0)
+  left_at             DateTime?                  @db.DateTime(0)
+  tb_project_projects tb_project_projects?       @relation(fields: [project_id], references: [id], onUpdate: SetNull, map: "fk_project_id")
+  user_account        user_account?              @relation(fields: [user_id], references: [user_id], onUpdate: SetNull, map: "fk_user_id")
+
+  @@index([project_id], map: "fk_project_id")
+  @@index([user_id], map: "fk_user_id")
+}
+
+model tb_project_projects {
+  id                 Int                          @id @default(autoincrement())
+  join_code          String?                      @db.VarChar(20)
+  name               String?                      @db.VarChar(255)
+  description        String?                      @db.Text
+  priority           tb_project_projects_priority
+  status             tb_project_projects_status
+  join_enabled       Boolean
+  progress_percent   Decimal?                     @db.Decimal(10, 0)
+  completed_date     DateTime?                    @db.DateTime(0)
+  created_by         String?                      @db.VarChar(255)
+  created_at         DateTime                     @default(now()) @db.DateTime(0)
+  updated_at         DateTime                     @default(now()) @db.DateTime(0)
+  tb_project_members tb_project_members[]
+  user_account       user_account?                @relation(fields: [created_by], references: [user_id], onUpdate: SetNull, map: "fk_created_by")
+
+  @@index([created_by], map: "fk_created_by")
+}
+
+enum tb_project_members_status {
+  invited
+  joined
+  declined
+}
+
+enum tb_project_projects_priority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum tb_project_projects_status {
+  draft
+  started
+  completed
+  cancelled
+}
