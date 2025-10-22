@@ -105,7 +105,7 @@ export default function KanbanBoard() {
     return (
         <div className="relative">
             <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="flex gap-5 overflow-x-auto pb-4">
+                <div className="flex gap-6 overflow-x-auto pb-6 px-1">
                     {boards.map((board) => {
                         const tasks = board.tasks ?? [];
 
@@ -115,41 +115,52 @@ export default function KanbanBoard() {
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`flex flex-col border rounded-xl shadow-sm transition-all duration-200 ${snapshot.isDraggingOver
-                                            ? "ring-2 ring-primary-300"
-                                            : board.id === "failed"
-                                                ? "bg-white/95"
-                                                : "bg-white/95"
-                                            }`}
+                                        className={`flex flex-col rounded-2xl border border-gray-100 bg-gradient-to-b from-white to-slate-50 shadow-md transition-all duration-200 ${snapshot.isDraggingOver ? "ring-2 ring-offset-2 ring-primary-300" : ""}`}
                                         style={{
-                                            width: "18rem",
-                                            maxHeight: "80vh",
+                                            width: "20rem",
+                                            maxHeight: "82vh",
                                             flexShrink: 0,
-                                            borderTop: `4px solid ${board.color ?? "#e5e7eb"}`,
+                                            borderTop: `6px solid ${board.color ?? "#e2e8f0"}`,
                                         }}
                                     >
-                                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                                            <div className="flex items-center gap-2">
-                                                {board.icon}
-                                                <h2 className="font-semibold text-gray-700">
-                                                    {board.title}
-                                                </h2>
+                                        <div
+                                            className="flex items-center justify-between rounded-t-xl px-5 py-4 text-sm text-white"
+                                            style={{
+                                                background: board.color ?? "#1f2937",
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-white/10 text-xs font-semibold uppercase">
+                                                    {(board.title ?? "?").slice(0, 2)}
+                                                </div>
+                                                <div>
+                                                    <h2 className="font-semibold text-base leading-tight">
+                                                        {board.title}
+                                                    </h2>
+                                                    <span className="text-xs text-white/70">
+                                                        {tasks.length} งาน
+                                                    </span>
+                                                </div>
                                             </div>
                                             {board.isDefault && (
-                                                <button className="text-gray-400 hover:text-primary-500">
+                                                <button
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-white/10 text-white transition hover:bg-white/20"
+                                                    type="button"
+                                                    aria-label="Add task"
+                                                >
                                                     <FaPlus size={14} />
                                                 </button>
                                             )}
                                         </div>
 
                                         <div
-                                            className="p-3 space-y-3 overflow-y-auto"
+                                            className="flex-1 overflow-y-auto p-4"
                                             style={{
-                                                height: "calc(80vh - 64px)",
+                                                height: "calc(82vh - 110px)",
                                             }}
                                         >
                                             {tasks.length === 0 && (
-                                                <div className="border border-dashed border-gray-300 rounded-lg p-4 text-sm text-gray-400 text-center">
+                                                <div className="flex h-[130px] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-400">
                                                     วางการ์ดที่นี่
                                                 </div>
                                             )}
@@ -165,12 +176,18 @@ export default function KanbanBoard() {
                                                             ref={provided.innerRef}
                                                             {...provided.draggableProps}
                                                             {...provided.dragHandleProps}
-                                                            className={`border border-gray-200 rounded-md p-3 text-sm text-gray-700 bg-white whitespace-pre-wrap cursor-grab transition-all ${snapshot.isDragging
-                                                                ? "bg-primary-100 shadow-md scale-[1.02]"
-                                                                : "hover:bg-primary-50 hover:shadow-sm"
+                                                            className={`relative rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm transition-all ${snapshot.isDragging
+                                                                ? "scale-[1.02] border-primary-200 shadow-lg"
+                                                                : "hover:border-primary-200 hover:shadow-md"
                                                                 }`}
                                                         >
-                                                            {task.title}
+                                                            <div className="text-sm font-semibold text-gray-800">
+                                                                {task.title}
+                                                            </div>
+                                                            <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
+                                                                <span>รายละเอียดเพิ่มเติม</span>
+                                                                <span className="font-medium text-primary-500">ดู</span>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </Draggable>
