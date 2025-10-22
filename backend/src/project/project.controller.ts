@@ -78,7 +78,7 @@ export class ProjectController {
   }
 
   @Get("task-status/get-all-status-by-project/:project_id")
-  @Roles('admin', 'staff')
+  @Roles('admin', 'staff', 'employee')
   async getTaskStatusByProjectID(@Param('project_id') project_id: string) {
     return this.projectService.getTaskStatusByProjectID(Number(project_id))
   }

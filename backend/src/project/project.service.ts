@@ -229,25 +229,25 @@ export class ProjectService {
 
   async createTaskStatuses(project_id: number, statuses: any[]) {
     try {
-
-      const existing = await this.prisma.tb_project_task_statuses.findMany({
+      // Determine current max order to append new statuses correctly
+      const agg = await this.prisma.tb_project_task_statuses.aggregate({
         where: { project_id },
+        _max: { order_index: true },
       });
 
-      if (existing.length > 0) {
-        return new ApiResponse('โปรเจกต์นี้มีสถานะอยู่แล้ว', 200, existing);
-      }
+      const baseOrder = (agg._max.order_index ?? 0);
 
+      const data = statuses.map((s, i) => ({
+        project_id,
+        name: s.name,
+        color: s.color || '#9CA3AF',
+        order_index: s.order_index ?? baseOrder + i + 1,
+        is_default: s.is_default ?? false,
+        is_done: s.is_done ?? false,
+      }));
 
       const created = await this.prisma.tb_project_task_statuses.createMany({
-        data: statuses.map((s, i) => ({
-          project_id,
-          name: s.name,
-          color: s.color || '#9CA3AF',
-          order_index: s.order_index || i + 1,
-          is_default: s.is_default ?? false,
-          is_done: s.is_done ?? false,
-        })),
+        data,
         skipDuplicates: true,
       });
 
@@ -350,6 +350,9 @@ export class ProjectService {
     const lists = await this.prisma.tb_project_task_statuses.findMany({
       where: {
         project_id: project_id
+      },
+      orderBy: {
+        order_index: 'asc',
       }
     });
 

@@ -1,24 +1,11 @@
 "use client"
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
-import {
-    closestCenter,
-    DndContext,
-    KeyboardSensor,
-    PointerSensor,
-    useSensor,
-    useSensors,
-} from "@dnd-kit/core";
-import {
-    arrayMove,
-    SortableContext,
-    sortableKeyboardCoordinates,
-    useSortable,
-    verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Lottie from "lottie-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { FiCalendar, FiCheck, FiClipboard, FiEdit2, FiFlag, FiHash, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
 import { LuGripVertical } from "react-icons/lu";
 import projectAnimation from "../../../../../public/Comacon - planning.json";
@@ -31,6 +18,9 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
     const { t } = useLanguage();
     const [taskList, setTaskList] = useState<any>([]);
     const [isEditMode, setIsEditMode] = useState(false);
+    const [originalTaskList, setOriginalTaskList] = useState<any[]>([]);
+    const [deletedIds, setDeletedIds] = useState<number[]>([]);
+    const [focusedTaskId, setFocusedTaskId] = useState<any>(null);
 
     const getTaskStatus = async () => {
         try {
@@ -49,48 +39,31 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         getTaskStatus()
     }, [])
 
+    // DnD sensors and handler
     const sensors = useSensors(
-        useSensor(PointerSensor),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
+        useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
     );
 
-    const handleDragEnd = async (event: any) => {
+    const handleDragEnd = (event: any) => {
         const { active, over } = event;
-
         if (!isEditMode || !over || active.id === over.id) return;
 
         setTaskList((items: any[]) => {
-            const oldIndex = items.findIndex((item) => item.id === active.id);
-            const newIndex = items.findIndex((item) => item.id === over.id);
-
-            const updatedItems = arrayMove(items, oldIndex, newIndex);
-            return updatedItems.map((item: any, index: number) => ({
+            const oldIndex = items.findIndex((item) => String(item.id) === String(active.id));
+            const newIndex = items.findIndex((item) => String(item.id) === String(over.id));
+            const updatedItems = arrayMove(items, oldIndex, newIndex).map((item: any, index: number) => ({
                 ...item,
-                order_index: index + 1
+                order_index: index + 1,
             }));
+            return updatedItems;
         });
-
-        // Update order_index via API for all tasks
-        setTimeout(async () => {
-            try {
-                const promises = taskList.map((task: any) =>
-                    apiPrivate.patch(`/project/task-status/update/${task.id}`, { order_index: task.order_index })
-                );
-                await Promise.all(promises);
-            } catch (error) {
-                console.error("Error updating order indices:", error);
-                getTaskStatus(); // Refresh to rollback if needed
-            }
-        }, 0);
     };
 
     const handleAddTask = async () => {
         if (!isEditMode) return;
 
         const newOrder = taskList.length + 1;
-        const tempId = Date.now();
+        const tempId = `temp-${Date.now()}`;
         const newTask = {
             id: tempId,
             name: "Untitled",
@@ -98,125 +71,146 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             order_index: newOrder,
             is_default: false,
             is_done: false,
+            _isNew: true,
         };
 
         setTaskList((prev: any) => [...prev, newTask]);
-
-        try {
-            const payload = {
-                project_id: project.id,
-                statuses: [{
-                    name: newTask.name,
-                    color: newTask.color,
-                    order_index: newTask.order_index,
-                    is_default: newTask.is_default,
-                    is_done: newTask.is_done,
-                }],
-            };
-
-            const response = await apiPrivate.post(`/project/task-status/create`, payload);
-
-            if (response.status === 201) {
-                getTaskStatus(); // Refresh to include the new real task
-            }
-        } catch (error) {
-            console.error("Error creating task status:", error);
-            // Rollback state on error
-            setTaskList((prev: any) => prev.filter((t: any) => t.id !== tempId));
-            alert("เกิดข้อผิดพลาดในการเพิ่มหัวข้องาน");
-        }
     };
 
-    const handleRemoveTask = async (id: number) => {
+    const handleRemoveTask = async (id: any) => {
         if (!isEditMode) return;
 
-        try {
-            const response = await apiPrivate.delete(`/project/task-status/delete/${id}`);
-
-            if (response.status === 200) {
-                getTaskStatus(); // Refresh list
-            } else {
-                alert("⚠️ ลบไม่สำเร็จ");
-            }
-        } catch (error) {
-            console.error("Error deleting task status:", error);
-            alert("เกิดข้อผิดพลาดในการลบ");
+        const isTemp = typeof id === 'string' && id.startsWith('temp-');
+        if (!isTemp) {
+            setDeletedIds((prev) => Array.from(new Set([...(prev || []), Number(id)])));
         }
+
+        setTaskList((prev: any[]) => prev.filter((t) => String(t.id) !== String(id)).map((item, idx) => ({
+            ...item,
+            order_index: idx + 1,
+        })));
     };
 
-    const handleChangeName = async (id: number, value: string) => {
+    const handleChangeName = async (id: any, value: string) => {
         if (!isEditMode) return;
 
         setTaskList((prev: any) =>
             prev.map((task: any) =>
-                task.id === id ? { ...task, name: value } : task
+                String(task.id) === String(id) ? { ...task, name: value } : task
             )
         );
-
-        try {
-            await apiPrivate.patch(`/project/task-status/update/${id}`, { name: value });
-        } catch (error) {
-            console.error("Error updating task name:", error);
-            // Optionally rollback
-            getTaskStatus();
-        }
     };
 
-    const handleChangeColor = async (id: number, color: string) => {
+    const handleChangeColor = async (id: any, color: string) => {
         if (!isEditMode) return;
 
         setTaskList((prev: any) =>
             prev.map((task: any) =>
-                task.id === id ? { ...task, color } : task
+                String(task.id) === String(id) ? { ...task, color } : task
             )
         );
-
-        try {
-            await apiPrivate.patch(`/project/task-status/update/${id}`, { color });
-        } catch (error) {
-            console.error("Error updating task color:", error);
-            // Optionally rollback
-            getTaskStatus();
-        }
     };
 
-    const handleToggle = async (id: number, field: "is_default" | "is_done") => {
+    const handleToggle = async (id: any, field: "is_default" | "is_done") => {
         if (!isEditMode) return;
 
-        const currentTask = taskList.find((t: any) => t.id === id);
-        if (!currentTask) return;
+        setTaskList((prev: any[]) => {
+            const current = prev.find((t) => String(t.id) === String(id));
+            if (!current) return prev;
 
-        const updateData: any = {};
-        if (field === "is_default") {
-            updateData.is_default = true;
-            updateData.is_done = false;
-        } else {
-            updateData.is_done = true;
-            updateData.is_default = false;
-        }
+            return prev.map((task) => {
+                if (String(task.id) === String(id)) {
+                    return {
+                        ...task,
+                        is_default: field === 'is_default',
+                        is_done: field === 'is_done',
+                    };
+                }
+                // Ensure exclusivity within local state
+                if (field === 'is_default' && task.is_default) {
+                    return { ...task, is_default: false };
+                }
+                if (field === 'is_done' && task.is_done) {
+                    return { ...task, is_done: false };
+                }
+                return task;
+            });
+        });
+    };
 
-        // Optimistic update for this task
-        setTaskList((prev: any) =>
-            prev.map((task: any) =>
-                task.id === id ? { ...task, ...updateData } : task
-            )
-        );
-
-        try {
-            await apiPrivate.patch(`/project/task-status/update/${id}`, updateData);
-            getTaskStatus(); // Refresh to update other tasks (backend sets others to false)
-        } catch (error) {
-            console.error("Error toggling task status:", error);
-            getTaskStatus(); // Rollback by refresh
-        }
+    const startEdit = () => {
+        setOriginalTaskList(JSON.parse(JSON.stringify(taskList)));
+        setDeletedIds([]);
+        setIsEditMode(true);
     };
 
     const handleCancelEdit = () => {
+        setDeletedIds([]);
         setIsEditMode(false);
+        getTaskStatus();
     };
 
-    const handleDoneEdit = () => {
-        setIsEditMode(false);
+    const handleDoneEdit = async () => {
+        try {
+            // Prepare operations
+            const isTemp = (id: any) => typeof id === 'string' && id.startsWith('temp-');
+
+            const newTasks = taskList.filter((t: any) => isTemp(t.id));
+            const existingTasks = taskList.filter((t: any) => !isTemp(t.id) && !deletedIds.includes(Number(t.id)));
+
+            // Deletes
+            if (deletedIds.length > 0) {
+                await Promise.all(deletedIds.map((id) => apiPrivate.delete(`/project/task-status/delete/${id}`)));
+            }
+
+            // Creates
+            if (newTasks.length > 0) {
+                const payload = {
+                    project_id: project.id,
+                    statuses: newTasks.map((t: any) => ({
+                        name: t.name,
+                        color: t.color,
+                        order_index: t.order_index,
+                        is_default: t.is_default,
+                        is_done: t.is_done,
+                    })),
+                };
+                await apiPrivate.post(`/project/task-status/create`, payload);
+            }
+
+            // Updates (compare with original)
+            const originalMap = new Map<string, any>(originalTaskList.map((o: any) => [String(o.id), o]));
+            const updatePromises: any[] = [];
+            for (const t of existingTasks) {
+                const orig = originalMap.get(String(t.id));
+                if (!orig) continue;
+
+                const changes: any = {};
+                if (t.name !== orig.name) changes.name = t.name;
+                if (t.color !== orig.color) changes.color = t.color;
+                if (t.is_default !== orig.is_default) changes.is_default = t.is_default;
+                if (t.is_done !== orig.is_done) changes.is_done = t.is_done;
+                if (t.order_index !== orig.order_index) changes.order_index = t.order_index;
+
+                if (Object.keys(changes).length > 0) {
+                    updatePromises.push(apiPrivate.patch(`/project/task-status/update/${t.id}`, changes));
+                }
+            }
+
+            if (updatePromises.length > 0) {
+                await Promise.all(updatePromises);
+            }
+
+            await getTaskStatus();
+            setIsEditMode(false);
+            setDeletedIds([]);
+        } catch (error) {
+            console.error('Error saving changes:', error);
+            alert('เกิดข้อผิดพลาดในการบันทึกการแก้ไข');
+            await getTaskStatus();
+            setIsEditMode(false);
+            setDeletedIds([]);
+        }
     };
 
     const InfoItem = ({ icon: Icon, label, value }: any) => (
@@ -231,29 +225,17 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         </div>
     );
 
-    const SortableTaskRow = ({ task, index }: { task: any; index: number }) => {
-        const {
-            attributes,
-            listeners,
-            setNodeRef,
-            transform,
-            transition,
-            isDragging,
-        } = useSortable({ id: String(task.id) });
-
+    const SortableTaskRow = memo(({ task, index, isEditMode }: { task: any; index: number; isEditMode: boolean }) => {
+        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(task.id) });
         const style = {
             transform: CSS.Transform.toString(transform),
             transition,
-        };
+        } as React.CSSProperties;
 
         const currentColor = task.color || "#3B82F6";
 
         return (
-            <div
-                ref={setNodeRef}
-                style={style}
-                className={`bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all duration-200 ${isDragging ? 'opacity-75 ring-2 ring-primary-500/50 shadow-lg' : ''}`}
-            >
+            <div ref={setNodeRef} style={style} className={`bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all duration-200 ${isDragging ? 'opacity-75 ring-2 ring-primary-500/50 shadow-lg' : ''}`}>
                 {/* Main row: Drag/Order + Name + Color */}
                 <div className="flex items-center gap-4 mb-3">
                     <div className="flex-shrink-0 w-8">
@@ -272,6 +254,8 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                             placeholder={`หัวข้องานที่ ${index + 1}`}
                             value={task.name || task.title || ""}
                             onChange={(e) => handleChangeName(task.id, e.target.value)}
+                            onFocus={() => setFocusedTaskId(task.id)}
+                            autoFocus={focusedTaskId === task.id}
                             className={`${isEditMode ? "" : "bg-gray-100 cursor-not-allowed"} text-sm font-medium`}
                             readOnly={!isEditMode}
                         />
@@ -288,6 +272,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                 type="color"
                                 value={currentColor}
                                 onChange={(e) => handleChangeColor(task.id, e.target.value)}
+                                tabIndex={-1}
                                 className="w-20 h-8 p-0 border-2 border-gray-300 rounded-md focus:ring-primary-500"
                             />
                         )}
@@ -356,7 +341,8 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 </div>
             </div>
         );
-    };
+    });
+    SortableTaskRow.displayName = "SortableTaskRow";
 
     return (
         <MinimalModal
@@ -419,8 +405,8 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                             {!isEditMode ? (
                                 <CustomButton
                                     size="sm"
-                                    variant="outline"
-                                    onClick={() => setIsEditMode(true)}
+
+                                    onClick={startEdit}
                                     className="flex items-center gap-1"
                                 >
                                     <FiEdit2 size={14} /> แก้ไข
@@ -429,7 +415,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                 <>
                                     <CustomButton
                                         size="sm"
-                                        variant="outline"
+
                                         onClick={handleCancelEdit}
                                         className="flex items-center gap-1 text-gray-600 hover:text-gray-800"
                                     >
@@ -457,23 +443,16 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     {taskList.length > 0 ? (
                         <div className="space-y-4 max-h-96 overflow-y-auto">
                             {isEditMode ? (
-                                <DndContext
-                                    sensors={sensors}
-                                    collisionDetection={closestCenter}
-                                    onDragEnd={handleDragEnd}
-                                >
-                                    <SortableContext
-                                        items={taskList.map((task: any) => String(task.id))}
-                                        strategy={verticalListSortingStrategy}
-                                    >
+                                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                                    <SortableContext items={taskList.map((t: any) => String(t.id))} strategy={verticalListSortingStrategy}>
                                         {taskList.map((task: any, index: number) => (
-                                            <SortableTaskRow key={task.id} task={task} index={index} />
+                                            <SortableTaskRow key={String(task.id)} task={task} index={index} isEditMode={isEditMode} />
                                         ))}
                                     </SortableContext>
                                 </DndContext>
                             ) : (
                                 taskList.map((task: any, index: number) => (
-                                    <SortableTaskRow key={task.id} task={task} index={index} />
+                                    <SortableTaskRow key={String(task.id)} task={task} index={index} isEditMode={isEditMode} />
                                 ))
                             )}
                         </div>
