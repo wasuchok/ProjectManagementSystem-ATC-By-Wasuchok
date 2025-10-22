@@ -1,15 +1,16 @@
 "use client"
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
+import { encodeSingleHashid } from "@/app/utils/hashids";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Lottie from "lottie-react";
+import Link from "next/link";
 import { memo, useEffect, useState } from "react";
-import { FiCalendar, FiCheck, FiClipboard, FiEdit2, FiFileText, FiFlag, FiHash, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiCalendar, FiCheck, FiClipboard, FiEdit2, FiFileText, FiFlag, FiHash, FiPlay, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
 import { LuGripVertical } from "react-icons/lu";
 import projectAnimation from "../../../../../public/Comacon - planning.json";
-import { CustomButton } from "../../Input/CustomButton";
 import TextArea from "../../Input/TextArea";
 import TextField from "../../Input/TextField";
 import MinimalModal from "../../MinimalModal";
@@ -379,7 +380,14 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 </div>
                 <div className="relative z-10 text-center text-gray-800">
                     <h2 className="text-xl font-semibold mb-1">{t('project.detail_project_title')}</h2>
-                    <p className="text-gray-600 text-sm">{t('project.detail_project_desc')}</p>
+                    <p className="text-gray-600 text-sm mb-3">{t('project.detail_project_desc')}</p>
+                    <Link
+                        href={`/boards/view_board/${encodeSingleHashid(project.id)}`}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-green-300 via-emerald-400 to-teal-300 hover:from-green-400 hover:via-emerald-500 hover:to-teal-400 text-white rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
+                    >
+                        <FiPlay size={14} />
+                        {t('project.start_planning')}
+                    </Link>
                 </div>
             </div>
 
@@ -435,53 +443,57 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 </div>
 
                 <div className="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm">
-                    <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b px-6 py-3 flex items-center justify-between">
-                        <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                            {t('project.task_status_title')}
-                            <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 border border-gray-200">{taskList.length}</span>
-                        </p>
+                    <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900">
+                                {t('project.task_status_title')}
+                            </p>
+                            <span className="px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-700 rounded-full border border-gray-200">
+                                {taskList.length}
+                            </span>
+                        </div>
+
                         <div className="flex items-center gap-2">
                             {!isEditMode ? (
-                                <CustomButton
-                                    size="sm"
-
+                                <button
                                     onClick={startEdit}
-                                    className="flex items-center gap-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200 transition-colors duration-150 ease-in-out"
                                 >
-                                    <FiEdit2 size={14} /> {t('project.edit')}
-                                </CustomButton>
+                                    <FiEdit2 size={14} />
+                                    {t('project.edit')}
+                                </button>
                             ) : (
                                 <div className="flex items-center gap-2">
-                                    <CustomButton
-                                        size="sm"
-
+                                    <button
                                         onClick={handleCancelEdit}
-                                        className="flex items-center gap-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 transition-colors duration-200"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200 transition-colors duration-150 ease-in-out"
                                     >
-                                        <FiX size={14} /> {t('project.cancel')}
-                                    </CustomButton>
-                                    <CustomButton
-                                        size="sm"
-                                        variant="primary"
+                                        <FiX size={14} />
+                                        {t('project.cancel')}
+                                    </button>
+                                    <button
                                         onClick={handleDoneEdit}
-                                        className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md transition-all duration-200"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
                                     >
-                                        <FiCheck size={14} /> {t('project.done_status')}
-                                    </CustomButton>
+                                        <FiCheck size={14} />
+                                        {t('project.done_status')}
+                                    </button>
                                 </div>
                             )}
+
                             <button
                                 onClick={handleAddTask}
                                 disabled={!isEditMode}
-                                className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 disabled:cursor-not-allowed shadow-sm hover:shadow-md transition-all duration-200"
+                                className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
                             >
-                                <FiPlus size={14} /> {t('project.add')}
+                                <FiPlus size={14} />
+                                {t('project.add')}
                             </button>
                         </div>
                     </div>
 
                     {taskList.length > 0 ? (
-                        <div className="space-y-4 max-h-[28rem] overflow-y-auto p-6">
+                        <div className="space-y-4 p-1.5">
                             {isEditMode ? (
                                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                                     <SortableContext items={taskList.map((t: any) => String(t.id))} strategy={verticalListSortingStrategy}>

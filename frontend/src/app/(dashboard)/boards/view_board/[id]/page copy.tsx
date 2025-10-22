@@ -1,41 +1,72 @@
 "use client";
 
-import { apiPrivate } from "@/app/services/apiPrivate";
-import { decodeSingleHashid } from "@/app/utils/hashids";
 import {
     DragDropContext,
     Draggable,
     Droppable,
     DropResult,
 } from "@hello-pangea/dnd";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-    FaPlus
+    FaCheckCircle,
+    FaPlus,
+    FaSpinner,
+    FaTasks,
+    FaTimesCircle,
 } from "react-icons/fa";
 
 export default function KanbanBoard() {
-    const [boards, setBoards] = useState([])
-    const { id } = useParams()
-
-    const fetchAllStatusTask = async () => {
-        try {
-            const response = await apiPrivate.get(`/project/task-status/get-all-status-by-project/${decodeSingleHashid(String(id))}`)
-            if (response.status == 200 || response.status == 201) {
-                console.log(response.data.data)
-                setBoards(response.data.data)
-            }
-
-        } catch (error) {
-            console.log(error)
-        }
-    }
-
-    useEffect(() => {
-        fetchAllStatusTask()
-
-    }, [])
-
+    const [boards, setBoards] = useState([
+        {
+            id: "todo",
+            title: "To Do",
+            icon: <FaTasks className="text-primary-500" />,
+            tasks: [
+                {
+                    id: "1",
+                    title:
+                        "ออกแบบหน้า Login\n- ใช้สีธีมหลัก\n- ปรับปุ่มให้โค้งมน\n- เพิ่ม animation ตอน hover",
+                },
+                { id: "2", title: "ตั้งค่า Database MySQL" },
+            ],
+        },
+        {
+            id: "progress",
+            title: "In Progress",
+            icon: <FaSpinner className="text-primary-500 animate-spin-slow" />,
+            tasks: [
+                {
+                    id: "3",
+                    title:
+                        "พัฒนา API Authentication\n- Register / Login\n- JWT Middleware\n- Validate password",
+                },
+            ],
+        },
+        {
+            id: "done",
+            title: "Done",
+            icon: <FaCheckCircle className="text-green-500" />,
+            tasks: [
+                {
+                    id: "4",
+                    title:
+                        "สร้าง Git Repository\n- Push ครั้งแรก\n- เขียน README\n- ตั้ง branch develop",
+                },
+            ],
+        },
+        {
+            id: "failed",
+            title: "Failed",
+            icon: <FaTimesCircle className="text-red-500" />,
+            tasks: [
+                {
+                    id: "5",
+                    title:
+                        "เชื่อมต่อฐานข้อมูลล้มเหลว\n- ตรวจสอบ Environment Variable\n- แก้ไข Connection String",
+                },
+            ],
+        },
+    ]);
 
     const handleDragEnd = (result: DropResult) => {
         const { source, destination } = result;

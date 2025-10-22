@@ -7,6 +7,6 @@ import { UserAccountService } from './user_account.service';
 @Module({
   controllers: [UserAccountController],
   providers: [UserAccountService, PrismaService],
-  imports: [JwtModule]
+  imports: [JwtModule],
 })
-export class UserAccountModule { }
+export class UserAccountModule {}
