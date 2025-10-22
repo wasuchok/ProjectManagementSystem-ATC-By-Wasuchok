@@ -1,0 +1,5 @@
+PORT=5555
+
+DATABASE_URL="mysql://root:@localhost:3306/pms"
+JWT_SECRET="lovemymom"
+JWT_REFRESH_SECRET="HELLO"

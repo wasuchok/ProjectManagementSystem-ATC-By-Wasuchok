@@ -1,176 +1,313 @@
 "use client";
 
-import {
-    DragDropContext,
-    Draggable,
-    Droppable,
-    DropResult,
-} from "@hello-pangea/dnd";
-import { useState } from "react";
-import {
-    FaCheckCircle,
-    FaPlus,
-    FaSpinner,
-    FaTasks,
-    FaTimesCircle,
-} from "react-icons/fa";
+import ModalDetail from "@/app/components/boards/modal/ModalDetail";
+import ModalInviteJoin from "@/app/components/boards/modal/ModalInviteJoin";
+import { ScrollableTable } from "@/app/components/boards/table/ScrollableTable";
+import { CustomButton } from "@/app/components/Input/CustomButton";
+import TextField from "@/app/components/Input/TextField";
+import { useLanguage } from "@/app/contexts/LanguageContext";
+import { useUser } from "@/app/contexts/UserContext";
+import { apiPrivate } from "@/app/services/apiPrivate";
+import { getSocket } from "@/app/utils/socket";
+import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { FiUsers } from "react-icons/fi";
 
-export default function KanbanBoard() {
-    const [boards, setBoards] = useState([
-        {
-            id: "todo",
-            title: "To Do",
-            icon: <FaTasks className="text-primary-500" />,
-            tasks: [
-                {
-                    id: "1",
-                    title:
-                        "ออกแบบหน้า Login\n- ใช้สีธีมหลัก\n- ปรับปุ่มให้โค้งมน\n- เพิ่ม animation ตอน hover",
-                },
-                { id: "2", title: "ตั้งค่า Database MySQL" },
-            ],
-        },
-        {
-            id: "progress",
-            title: "In Progress",
-            icon: <FaSpinner className="text-primary-500 animate-spin-slow" />,
-            tasks: [
-                {
-                    id: "3",
-                    title:
-                        "พัฒนา API Authentication\n- Register / Login\n- JWT Middleware\n- Validate password",
-                },
-            ],
-        },
-        {
-            id: "done",
-            title: "Done",
-            icon: <FaCheckCircle className="text-green-500" />,
-            tasks: [
-                {
-                    id: "4",
-                    title:
-                        "สร้าง Git Repository\n- Push ครั้งแรก\n- เขียน README\n- ตั้ง branch develop",
-                },
-            ],
-        },
-        {
-            id: "failed",
-            title: "Failed",
-            icon: <FaTimesCircle className="text-red-500" />,
-            tasks: [
-                {
-                    id: "5",
-                    title:
-                        "เชื่อมต่อฐานข้อมูลล้มเหลว\n- ตรวจสอบ Environment Variable\n- แก้ไข Connection String",
-                },
-            ],
-        },
-    ]);
+const Page = () => {
 
-    const handleDragEnd = (result: DropResult) => {
-        const { source, destination } = result;
-        if (!destination) return;
+    const router = useRouter()
+    const { user } = useUser();
+    const { t } = useLanguage();
+    const [data, setData] = useState<any[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const [openModalDetail, setOpenModalDetail] = useState(false)
+    const [openModalInviteJoin, setOpenModalInviteJoin] = useState(false)
+    const [selectedProject, setSelectedProject] = useState<any>(null);
+    const [pendingCount, setPendingCount] = useState(0)
+    const [projectInvite, setProjectInvite] = useState([])
+
+    const fetchInviteProjectEmployee = async () => {
+        try {
+            fetchAllProjectsByEmployee()
+            fetchAllProjectsByEmployeeStatusInvite()
+            setOpenModalInviteJoin(true)
+        } catch (error) {
+            console.log(error)
+        }
+    }
 
 
-        if (
-            source.droppableId === destination.droppableId &&
-            source.index === destination.index
-        )
-            return;
+    const fetchInviteCountProject = async () => {
+        try {
+            const response = await apiPrivate.get(`/project/view/invite-count/${user?.id}`)
 
-        const newBoards = Array.from(boards);
-        const sourceBoard = newBoards.find(
-            (b) => b.id === source.droppableId
-        )!;
-        const destBoard = newBoards.find(
-            (b) => b.id === destination.droppableId
-        )!;
+            if (response.status == 200) {
+                setPendingCount(response.data.data)
+            }
+        } catch (error) {
+            console.log(error)
+            setPendingCount(0)
+        }
+    }
 
-        const [movedTask] = sourceBoard.tasks.splice(source.index, 1);
-        destBoard.tasks.splice(destination.index, 0, movedTask);
+    const fetchAllProjectsByEmployeeStatusInvite = async () => {
+        try {
+            if (!user?.id) return;
 
-        setBoards(newBoards);
+            const response = await apiPrivate.get(`/project/view/invite/${user?.id}`)
+
+            if (response.status == 200) {
+                console.log(response.data.data)
+                setProjectInvite(response.data.data)
+            }
+
+        } catch (error) {
+            console.log(error)
+        }
+    }
+
+    const fetchAllProjectsByEmployee = async () => {
+        try {
+            if (!user?.id) return;
+            setLoading(true);
+
+            const params = {
+                page: currentPage,
+                limit: 10,
+                status: "",
+                priority: "",
+                search: "",
+                created_by: user.id,
+            };
+
+            const response = await apiPrivate.get(`/project/views`, { params });
+
+            if (response.status === 200) {
+                const { result, pagination } = response.data.data;
+
+                const mappedData = result.map((item: any, index: number) => ({
+                    id: item.id,
+                    projectName: item.name,
+                    priority: item.priority,
+                    status: item.status,
+                    description: item.description,
+                    join_enabled: item.join_enabled,
+                    created_at: new Date(item.created_at).toLocaleDateString("th-TH"),
+                    join_code: item.join_code,
+                    num: (index + 1),
+                    employees: item.tb_project_members
+                }));
+
+                setData(mappedData);
+                setTotalPages(pagination.totalPages);
+            }
+        } catch (error) {
+            console.error("❌ Fetch Error:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
+    const columns: any = [
+        {
+            header: t("project.table_no"), accessor: "num",
+        },
+        { header: t("project.table_name"), accessor: "projectName" },
+        {
+            header: t("project.table_priority"),
+            accessor: "priority",
+            render: (value: any) => {
+                let styleClass = "bg-gray-100 text-gray-600 border border-gray-200";
+                let text = value;
+                let icon = null;
+
+                switch (value) {
+                    case "low":
+                        styleClass = "bg-green-50 text-green-700 border border-green-200";
+                        text = t("project.priority_low");
+                        icon = "🟢";
+                        break;
+                    case "normal":
+                        styleClass = "bg-blue-50 text-blue-700 border border-blue-200";
+                        text = t("project.priority_normal");
+                        icon = "🔵";
+                        break;
+                    case "high":
+                        styleClass = "bg-orange-50 text-orange-700 border border-orange-200";
+                        text = t("project.priority_high");
+                        icon = "🟠";
+                        break;
+                    case "urgent":
+                        styleClass = "bg-red-50 text-red-700 border border-red-200";
+                        text = t("project.priority_urgent");
+                        icon = "🔴";
+                        break;
+                }
+
+                return (
+                    <span
+                        className={`${styleClass} inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full shadow-sm`}
+                    >
+                        <span className="text-base leading-none">{icon}</span>
+                        {text}
+                    </span>
+                );
+            },
+        }
+        ,
+        {
+            header: t("project.table_status"),
+            accessor: "status",
+            render: (value: any) => {
+                let styleClass = "bg-gray-100 text-gray-600 border border-gray-200";
+                let text = value;
+
+                switch (value) {
+                    case "draft":
+                        styleClass = "bg-yellow-50 text-yellow-700 border border-yellow-200";
+                        text = t("project.status_draft");
+                        break;
+                    case "started":
+                        styleClass = "bg-blue-50 text-blue-700 border border-blue-200";
+                        text = t("project.status_started");
+                        break;
+                    case "completed":
+                        styleClass = "bg-green-50 text-green-700 border border-green-200";
+                        text = t("project.status_completed");
+                        break;
+                    case "cancelled":
+                        styleClass = "bg-red-50 text-red-700 border border-red-200";
+                        text = t("project.status_cancelled");
+                        break;
+                }
+
+                return (
+                    <span
+                        className={`${styleClass} px-3 py-1 text-xs font-semibold rounded-full shadow-sm`}
+                    >
+                        {text}
+                    </span>
+                );
+            },
+        },
+        { header: t("project.table_created_at"), accessor: "created_at" },
+    ];
+
+    const handleEdit = (row: any) => {
+        console.log(row);
+        setSelectedProject(row);
+        setOpenModalDetail(true);
+    };
+
+    const handleDelete = (row: any) => {
+        alert(`${t("project.delete")}: ${row.projectName}`);
+    };
+
+    useEffect(() => {
+        if (user) fetchInviteCountProject()
+
+        const socket = getSocket()
+
+        if (!socket.connected) socket.connect()
+        socket.emit('registerUser', user?.id)
+
+        const handler = (payload: any) => {
+            if (payload?.inviteCount !== undefined) {
+                console.log("test payload", payload)
+                setPendingCount(payload.inviteCount);
+            }
+        };
+        socket.on('invitedCountUpdated', handler);
+
+        return () => {
+            socket.off('invitedCountUpdated', handler);
+        };
+    }, [user])
+
+    useEffect(() => {
+        if (user) fetchAllProjectsByEmployee();
+    }, [user, currentPage]);
+
     return (
-        <div className="relative">
-            <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="flex gap-5 overflow-x-auto pb-4">
-                    {boards.map((board) => (
-                        <Droppable droppableId={board.id} key={board.id}>
-                            {(provided, snapshot) => (
-                                <div
-                                    ref={provided.innerRef}
-                                    {...provided.droppableProps}
-                                    className={`flex flex-col border rounded-xl shadow-sm transition-all duration-200 ${snapshot.isDraggingOver
-                                        ? "ring-2 ring-primary-300"
-                                        : board.id === "failed"
-                                            ? "bg-white/95"
-                                            : "bg-white/95"
-                                        }`}
-                                    style={{
-                                        width: "18rem",
-                                        maxHeight: "80vh",
-                                        flexShrink: 0,
+        <>
+            <div className="flex flex-col gap-2 mb-3">
+                <p className="text-2xl font-semibold">📁 {t("project.title")}</p>
+                <div className="flex gap-2 justify-between">
+                    <div className="flex gap-2">
+                        <TextField
+                            className=""
+                            fieldSize="sm"
+                            placeholder={`${t("project.search_placeholder")}`}
+                        />
+                        <CustomButton variant="secondary">{t('project.btn_search')}</CustomButton>
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="relative inline-block">
+                            {pendingCount > 0 && (
+                                <motion.div
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg z-10"
+                                    initial={{ scale: 2, rotate: 5 }}
+                                    animate={{
+                                        scale: [1, 1.1, 0.95, 1.1, 1],
+                                        rotate: [-20, 2, -8, 10]
+                                    }}
+                                    transition={{
+                                        repeat: Infinity,
+                                        duration: 5.5,
+                                        ease: "easeInOut"
                                     }}
                                 >
-
-                                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                                        <div className="flex items-center gap-2">
-                                            {board.icon}
-                                            <h2 className="font-semibold text-gray-700">
-                                                {board.title}
-                                            </h2>
-                                        </div>
-                                        <button className="text-gray-400 hover:text-primary-500">
-                                            <FaPlus size={14} />
-                                        </button>
-                                    </div>
-
-
-                                    <div
-                                        className="p-3 space-y-3 overflow-y-auto"
-                                        style={{
-                                            height: "calc(80vh - 64px)",
-                                        }}
-                                    >
-                                        {board.tasks.length === 0 && (
-                                            <div className="border border-dashed border-gray-300 rounded-lg p-4 text-sm text-gray-400 text-center">
-                                                วางการ์ดที่นี่
-                                            </div>
-                                        )}
-
-                                        {board.tasks.map((task, index) => (
-                                            <Draggable
-                                                key={task.id}
-                                                draggableId={task.id}
-                                                index={index}
-                                            >
-                                                {(provided, snapshot) => (
-                                                    <div
-                                                        ref={provided.innerRef}
-                                                        {...provided.draggableProps}
-                                                        {...provided.dragHandleProps}
-                                                        className={`border border-gray-200 rounded-md p-3 text-sm text-gray-700 bg-white whitespace-pre-wrap cursor-grab transition-all ${snapshot.isDragging
-                                                            ? "bg-primary-100 shadow-md scale-[1.02]"
-                                                            : "hover:bg-primary-50 hover:shadow-sm"
-                                                            }`}
-                                                    >
-                                                        {task.title}
-                                                    </div>
-                                                )}
-                                            </Draggable>
-                                        ))}
-
-                                        {provided.placeholder}
-                                    </div>
-                                </div>
+                                    {pendingCount}
+                                </motion.div>
                             )}
-                        </Droppable>
-                    ))}
+
+                            <CustomButton
+                                onClick={fetchInviteProjectEmployee}
+                                className="relative flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200 min-w-[140px] justify-center"
+                            >
+                                <FiUsers size={16} />
+                                {t('project.my_invitations')}
+                            </CustomButton>
+                        </div>
+                        <CustomButton onClick={() => router.push("/boards/create")}>{t('project.create')}</CustomButton>
+                    </div>
                 </div>
-            </DragDropContext>
-        </div>
+            </div>
+
+            <ScrollableTable
+                columns={columns}
+                data={data}
+                loading={loading}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+            />
+
+            {openModalDetail && (
+                <ModalDetail
+                    open={openModalDetail}
+                    setOpen={setOpenModalDetail}
+                    project={selectedProject}
+                />
+            )}
+
+            {openModalInviteJoin && (
+                <ModalInviteJoin
+                    open={openModalInviteJoin}
+                    setOpen={setOpenModalInviteJoin}
+                    projectInvite={projectInvite}
+                    fetchInviteCountProject={fetchInviteCountProject}
+                    fetchAllProjectsByEmployee={fetchAllProjectsByEmployee}
+                />
+            )}
+
+        </>
     );
-}
+};
+
+export default Page;

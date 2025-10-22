@@ -18,7 +18,7 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
     const [lang, setLang] = useState<LangType>("TH");
     const [dict, setDict] = useState(th);
 
-    // โหลดจาก localStorage
+
     useEffect(() => {
         const stored = localStorage.getItem("lang");
         if (stored === "EN") {
@@ -27,14 +27,14 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
         }
     }, []);
 
-    // เมื่อเปลี่ยนภาษา → บันทึกลง localStorage
+
     const changeLang = (newLang: LangType) => {
         setLang(newLang);
         localStorage.setItem("lang", newLang);
         setDict(newLang === "EN" ? en : th);
     };
 
-    // ฟังก์ชันแปลข้อความด้วย path เช่น "header.welcome"
+
     const t = (key: string) => {
         const parts = key.split(".");
         return parts.reduce((obj: any, k: string) => (obj ? obj[k] : key), dict) || key;

@@ -17,10 +17,6 @@ interface AlertOptions {
     message?: string;
 }
 
-/**
- * ฟังก์ชันแสดง Alert Modal แบบ Promise
- * ใช้งานได้เหมือน SweetAlert2
- */
 export function CustomAlert({ type = "info", title, message }: AlertOptions): Promise<boolean> {
     return new Promise((resolve) => {
         const container = document.createElement("div");

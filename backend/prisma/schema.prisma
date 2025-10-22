@@ -49,22 +49,38 @@ model tb_project_members {
 }
 
 model tb_project_projects {
-  id                 Int                          @id @default(autoincrement())
-  join_code          String?                      @db.VarChar(20)
-  name               String?                      @db.VarChar(255)
-  description        String?                      @db.Text
-  priority           tb_project_projects_priority
-  status             tb_project_projects_status
-  join_enabled       Boolean
-  progress_percent   Decimal?                     @db.Decimal(10, 0)
-  completed_date     DateTime?                    @db.DateTime(0)
-  created_by         String?                      @db.VarChar(255)
-  created_at         DateTime                     @default(now()) @db.DateTime(0)
-  updated_at         DateTime                     @default(now()) @db.DateTime(0)
-  tb_project_members tb_project_members[]
-  user_account       user_account?                @relation(fields: [created_by], references: [user_id], onUpdate: SetNull, map: "fk_created_by")
+  id                       Int                          @id @default(autoincrement())
+  join_code                String?                      @db.VarChar(20)
+  name                     String?                      @db.VarChar(255)
+  description              String?                      @db.Text
+  priority                 tb_project_projects_priority
+  status                   tb_project_projects_status
+  join_enabled             Boolean
+  progress_percent         Decimal?                     @default(0.00) @db.Decimal(5, 2)
+  completed_date           DateTime?                    @db.DateTime(0)
+  created_by               String?                      @db.VarChar(255)
+  created_at               DateTime                     @default(now()) @db.DateTime(0)
+  updated_at               DateTime                     @default(now()) @db.DateTime(0)
+  tb_project_members       tb_project_members[]
+  user_account             user_account?                @relation(fields: [created_by], references: [user_id], onUpdate: SetNull, map: "fk_created_by")
+  tb_project_task_statuses tb_project_task_statuses[]
 
   @@index([created_by], map: "fk_created_by")
+}
+
+model tb_project_task_statuses {
+  id                  Int                 @id @default(autoincrement())
+  project_id          Int
+  name                String              @db.VarChar(255)
+  color               String?             @db.VarChar(10)
+  order_index         Int?                @default(0)
+  is_default          Boolean?            @default(false)
+  is_done             Boolean?            @default(false)
+  created_at          DateTime?           @default(now()) @db.DateTime(0)
+  updated_at          DateTime?           @default(now()) @db.DateTime(0)
+  tb_project_projects tb_project_projects @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_project_id")
+
+  @@index([project_id], map: "fk_task_project_id")
 }
 
 enum tb_project_members_status {

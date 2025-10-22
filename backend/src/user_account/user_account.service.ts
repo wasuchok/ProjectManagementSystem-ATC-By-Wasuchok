@@ -158,6 +158,8 @@ export class UserAccountService {
       });
 
       if (!user || user.refresh_token !== refreshToken) {
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
         throw new UnauthorizedException('Refresh Token ไม่ถูกต้อง');
       }
 

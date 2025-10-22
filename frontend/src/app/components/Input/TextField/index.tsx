@@ -78,7 +78,7 @@ const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
                         disabled={props.disabled || isLoading}
                     />
 
-                    {/* Loading Spinner */}
+
                     {isLoading && (
                         <div className="absolute inset-y-0 right-3 flex items-center">
                             <svg
@@ -105,7 +105,7 @@ const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
                     )}
                 </div>
 
-                {/* Error Message */}
+
                 {error && (
                     <span className="text-red-500 text-xs mt-1 flex items-center gap-1">
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">

@@ -1,14 +1,87 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiResponse } from 'src/common/dto/api-response.dto';
+import { Roles } from 'src/common/role/roles.decorator';
+import { RolesGuard } from 'src/common/role/roles.guard';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { ProjectService } from './project.service';
 
 @Controller('project')
+@UseGuards(RolesGuard)
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) { }
 
+
   @Post("create")
+  @Roles('admin', 'staff', 'employee')
   createProject(@Body() createProjectDto: CreateProjectDto) {
     return this.projectService.createProject(createProjectDto);
   }
+
+
+  @Get('views')
+  @Roles('admin', 'staff', 'employee')
+  async readAllProjectByEmployee(@Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @Query('status') status?: string,
+    @Query('priority') priority?: string,
+    @Query('search') search?: string,
+    @Query('created_by') created_by?: string,) {
+    return this.projectService.readAllProjectByEmployee(Number(page), Number(limit), {
+      status,
+      priority,
+      search,
+      created_by
+    });
+  }
+
+  @Get('view/invite/:userId')
+  @Roles('admin', 'staff', 'employee')
+  async readInvite(@Param('userId') userId: string) {
+    return this.projectService.readInvite(userId)
+  }
+
+
+  @Get("view/invite-count/:userId")
+  @Roles('admin', 'staff', 'employee')
+  async readInviteCount(@Param('userId') userId: string) {
+    return this.projectService.readInviteCount(userId)
+  }
+
+  @Put("update/invite")
+  @Roles('admin', 'staff', 'employee')
+  async updateStatusInviteProject(@Body() body: { project_id: number; status: string },) {
+    return this.projectService.updateStatusInviteProject(body.project_id, body.status)
+  }
+
+  @Post("task-status/create")
+  @Roles('admin', 'staff', 'employee')
+  async createTaskStatuses(@Body() body: any) {
+    const { project_id, statuses } = body;
+
+    if (!project_id || !statuses || !Array.isArray(statuses)) {
+      return new ApiResponse('ข้อมูลไม่ถูกต้อง', 400, null);
+    }
+
+    return this.projectService.createTaskStatuses(project_id, statuses);
+  }
+
+  @Patch('/task-status/update/:id')
+  async updateStatus(@Param('id') id: string, @Body() body: any) {
+    const result = await this.projectService.updateTaskStatus(Number(id), body);
+    return result;
+  }
+
+  @Delete('/task-status/delete/:id')
+  async deleteStatus(@Param('id') id: string) {
+    const result = await this.projectService.deleteTaskStatus(Number(id));
+    return result;
+  }
+
+  @Get("task-status/get-all-status-by-project/:project_id")
+  @Roles('admin', 'staff')
+  async getTaskStatusByProjectID(@Param('project_id') project_id: string) {
+    return this.projectService.getTaskStatusByProjectID(Number(project_id))
+  }
+
 
 }

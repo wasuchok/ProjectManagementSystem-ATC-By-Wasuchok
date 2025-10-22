@@ -95,7 +95,7 @@ const Page = () => {
                         message: t('alert.alert_success')
                     })
 
-                    router.push("/home/view")
+                    router.push("/boards/view")
                 }
             }
         } catch (error) {

@@ -12,6 +12,8 @@
         "position": "Position"
     },
     "please_fill_in_information": "Please fill in information....",
+    "no_data_avaliable": "No data available",
+    "loading_data": "Loading data...",
     "modal": {
         "are_you_sure": "Are you sure?",
         "do_you_want_to_save_information": "Do you want to save information?"
@@ -34,6 +36,36 @@
         "priority": "Priority",
         "team": "Team",
         "create": "Create",
-        "join_content": "Allow joining"
+        "join_content": "Allow joining",
+        "table_no": "No",
+        "table_priority": "Priority",
+        "table_status": "Status",
+        "table_created_at": "Created_at",
+        "table_name": "Name",
+        "title": "Projects",
+        "search_placeholder": "Search Project",
+        "btn_search": "Search...",
+        "status_draft": "Draft",
+        "status_started": "In Progress",
+        "status_completed": "Completed",
+        "status_cancelled": "Cancelled",
+        "priority_low": "Low",
+        "priority_normal": "Normal",
+        "priority_high": "High",
+        "priority_urgent": "Urgent",
+        "detail_project_title": "Project Information",
+        "detail_project": "Project Details",
+        "detail_project_desc": "Explore all the details of your project",
+        "join_code": "Join Code",
+        "list_of_employees": "List of employees",
+        "my_invitations": "My Invitations",
+        "no_invitations": "There are no invitations at this time.",
+        "no_member": "There are no members in this project."
+    },
+    "table": {
+        "showing_page": "Showing page",
+        "of": "of",
+        "previous": "Previous",
+        "next": "Next"
     }
 }

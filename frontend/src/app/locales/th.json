@@ -12,6 +12,8 @@
         "position": "ตำแหน่ง"
     },
     "please_fill_in_information": "กรุณากรอกข้อมูลให้ครบ....",
+    "no_data_avaliable": "ไม่มีข้อมูล",
+    "loading_data": "กำลังโหลดข้อมูล...",
     "modal": {
         "are_you_sure": "คุณแน่ใจหรือไม่?",
         "do_you_want_to_save_information": "ต้องการบันทึกข้อมูลนี้หรือไม่?"
@@ -34,6 +36,36 @@
         "priority": "ความสำคัญ",
         "team": "สมาชิกทีม",
         "create": "สร้าง",
-        "join_content": "เปิดการเข้าร่วม"
+        "join_content": "เปิดการเข้าร่วม",
+        "table_no": "อันดับ",
+        "table_priority": "ลำดับความสำคัญ",
+        "table_status": "สถานะ",
+        "table_created_at": "วันที่สร้าง",
+        "table_name": "ชื่อ",
+        "title": "โปรเจกต์",
+        "search_placeholder": "ค้นหาโปรเจกต์",
+        "btn_search": "ค้นหา....",
+        "status_draft": "ร่าง",
+        "status_started": "กำลังดำเนินการ",
+        "status_completed": "เสร็จสิ้น",
+        "status_cancelled": "ยกเลิก",
+        "priority_low": "ต่ำ",
+        "priority_normal": "ปกติ",
+        "priority_high": "สูง",
+        "priority_urgent": "ด่วนมาก",
+        "detail_project_title": "ข้อมูลโปรเจกต์",
+        "detail_project": "รายละเอียดโปรเจกต์",
+        "detail_project_desc": "สำรวจรายละเอียดทั้งหมดของคุณ",
+        "join_code": "รหัสการเข้าร่วม",
+        "list_of_employees": "รายชื่อพนักงาน",
+        "my_invitations": "คำเชิญของฉัน",
+        "no_invitations": "ไม่มีคำเชิญในขณะนี้",
+        "no_member": "ไม่มีสมาชิกในโปรเจกต์นี้"
+    },
+    "table": {
+        "showing_page": "หน้าที่",
+        "of": "จากทั้งหมด",
+        "previous": "ย้อนหลัง",
+        "next": "ถัดไป"
     }
 }
