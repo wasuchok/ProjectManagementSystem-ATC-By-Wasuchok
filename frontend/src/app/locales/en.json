@@ -60,7 +60,13 @@
         "list_of_employees": "List of employees",
         "my_invitations": "My Invitations",
         "no_invitations": "There are no invitations at this time.",
-        "no_member": "There are no members in this project."
+        "no_member": "There are no members in this project.",
+        "task_status_title": "Task Statuses",
+        "default_status": "Default",
+        "done_status": "Completed",
+        "cancel": "Cancel",
+        "add": "Add",
+        "edit": "Edit"
     },
     "table": {
         "showing_page": "Showing page",

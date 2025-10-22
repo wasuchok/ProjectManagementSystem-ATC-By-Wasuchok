@@ -6,7 +6,7 @@ import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import Lottie from "lottie-react";
 import { memo, useEffect, useState } from "react";
-import { FiCalendar, FiCheck, FiClipboard, FiEdit2, FiFlag, FiHash, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiCalendar, FiCheck, FiClipboard, FiEdit2, FiFileText, FiFlag, FiHash, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
 import { LuGripVertical } from "react-icons/lu";
 import projectAnimation from "../../../../../public/Comacon - planning.json";
 import { CustomButton } from "../../Input/CustomButton";
@@ -39,7 +39,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         getTaskStatus()
     }, [])
 
-    // DnD sensors and handler
+
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
     );
@@ -126,7 +126,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                         is_done: field === 'is_done',
                     };
                 }
-                // Ensure exclusivity within local state
+
                 if (field === 'is_default' && task.is_default) {
                     return { ...task, is_default: false };
                 }
@@ -152,18 +152,18 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
 
     const handleDoneEdit = async () => {
         try {
-            // Prepare operations
+
             const isTemp = (id: any) => typeof id === 'string' && id.startsWith('temp-');
 
             const newTasks = taskList.filter((t: any) => isTemp(t.id));
             const existingTasks = taskList.filter((t: any) => !isTemp(t.id) && !deletedIds.includes(Number(t.id)));
 
-            // Deletes
+
             if (deletedIds.length > 0) {
                 await Promise.all(deletedIds.map((id) => apiPrivate.delete(`/project/task-status/delete/${id}`)));
             }
 
-            // Creates
+
             if (newTasks.length > 0) {
                 const payload = {
                     project_id: project.id,
@@ -178,7 +178,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 await apiPrivate.post(`/project/task-status/create`, payload);
             }
 
-            // Updates (compare with original)
+
             const originalMap = new Map<string, any>(originalTaskList.map((o: any) => [String(o.id), o]));
             const updatePromises: any[] = [];
             for (const t of existingTasks) {
@@ -295,7 +295,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     </div>
                 </div>
 
-                {/* Status row */}
+
                 <div className="flex items-center justify-between border-t pt-3">
                     <div className="flex items-center gap-4 flex-wrap">
                         {isEditMode ? (
@@ -307,7 +307,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                         onChange={() => handleToggle(task.id, "is_default")}
                                         className="rounded border-blue-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
                                     />
-                                    <span className="text-sm font-medium text-blue-700">ค่าเริ่มต้น</span>
+                                    <span className="text-sm font-medium text-blue-700"> {t('project.default_status')}</span>
                                 </label>
 
                                 <label className="flex items-center gap-2 p-2 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 transition-colors">
@@ -317,7 +317,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                         onChange={() => handleToggle(task.id, "is_done")}
                                         className="rounded border-green-300 text-green-600 focus:ring-green-500 w-4 h-4"
                                     />
-                                    <span className="text-sm font-medium text-green-700">เสร็จสิ้น</span>
+                                    <span className="text-sm font-medium text-green-700">{t('project.done_status')}</span>
                                 </label>
                             </>
                         ) : (
@@ -328,17 +328,17 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                 />
                                 {task.is_default && (
                                     <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium border border-blue-200">
-                                        ค่าเริ่มต้น
+                                        {t('project.default_status')}
                                     </span>
                                 )}
                                 {task.is_done && (
                                     <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium border border-green-200">
-                                        เสร็จสิ้น
+                                        {t('project.done_status')}
                                     </span>
                                 )}
                                 {!task.is_default && !task.is_done && (
                                     <span className="px-3 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium border border-gray-200">
-                                        ปกติ
+                                        {t('project.default_status')}
                                     </span>
                                 )}
                             </div>
@@ -437,30 +437,45 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 <div className="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm">
                     <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b px-6 py-3 flex items-center justify-between">
                         <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                            หัวข้องาน
+                            {t('project.task_status_title')}
                             <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 border border-gray-200">{taskList.length}</span>
                         </p>
                         <div className="flex items-center gap-2">
                             {!isEditMode ? (
-                                <CustomButton size="sm" onClick={startEdit} className="flex items-center gap-1">
-                                    <FiEdit2 size={14} /> แก้ไข
+                                <CustomButton
+                                    size="sm"
+
+                                    onClick={startEdit}
+                                    className="flex items-center gap-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200"
+                                >
+                                    <FiEdit2 size={14} /> {t('project.edit')}
                                 </CustomButton>
                             ) : (
-                                <>
-                                    <CustomButton size="sm" variant="outline" onClick={handleCancelEdit} className="flex items-center gap-1 text-gray-600 hover:text-gray-800">
-                                        <FiX size={14} /> ยกเลิก
+                                <div className="flex items-center gap-2">
+                                    <CustomButton
+                                        size="sm"
+
+                                        onClick={handleCancelEdit}
+                                        className="flex items-center gap-1 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-900 transition-colors duration-200"
+                                    >
+                                        <FiX size={14} /> {t('project.cancel')}
                                     </CustomButton>
-                                    <CustomButton size="sm" onClick={handleDoneEdit} className="flex items-center gap-1">
-                                        <FiCheck size={14} /> เสร็จสิ้น
+                                    <CustomButton
+                                        size="sm"
+                                        variant="primary"
+                                        onClick={handleDoneEdit}
+                                        className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md transition-all duration-200"
+                                    >
+                                        <FiCheck size={14} /> {t('project.done_status')}
                                     </CustomButton>
-                                </>
+                                </div>
                             )}
                             <button
                                 onClick={handleAddTask}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition disabled:opacity-50"
                                 disabled={!isEditMode}
+                                className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 disabled:cursor-not-allowed shadow-sm hover:shadow-md transition-all duration-200"
                             >
-                                <FiPlus size={14} /> เพิ่ม
+                                <FiPlus size={14} /> {t('project.add')}
                             </button>
                         </div>
                     </div>
@@ -496,26 +511,30 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     )}
                 </div>
 
-                <div className="border border-gray-100 rounded-xl p-6 bg-white space-y-4 shadow-sm">
+                <div className="border border-gray-100 rounded-xl p-6 bg-white space-y-6 shadow-sm">
                     <div className="flex items-start gap-3">
-                        <div className="text-primary-500 mt-1 flex-shrink-0">
-                            <FiClipboard size={16} />
+                        <div className="text-primary-500 mt-1 flex-shrink-0 bg-primary-50 p-2 rounded-lg">
+                            <FiClipboard size={18} />
                         </div>
                         <div className="flex-1">
-                            <p className="text-xs font-medium text-gray-600 mb-2">{t('project.project_name')}</p>
-                            <TextField value={project?.projectName || "-"} readOnly className="text-sm" />
+                            <p className="text-xs font-semibold text-gray-600 mb-3 uppercase tracking-wide">{t('project.project_name')}</p>
+                            <TextField
+                                value={project?.projectName || "-"}
+                                readOnly
+                                className="text-sm font-medium bg-gray-50 border border-gray-200 rounded-lg focus:ring-0 focus:border-primary-300 transition-colors duration-200"
+                            />
                         </div>
                     </div>
                     <div className="flex items-start gap-3">
-                        <div className="text-primary-500 mt-1 flex-shrink-0">
-                            <FiClipboard size={16} />
+                        <div className="text-primary-500 mt-1 flex-shrink-0 bg-primary-50 p-2 rounded-lg">
+                            <FiFileText size={18} />
                         </div>
                         <div className="flex-1">
-                            <p className="text-xs font-medium text-gray-600 mb-2">{t('project.description')}</p>
+                            <p className="text-xs font-semibold text-gray-600 mb-3 uppercase tracking-wide">{t('project.description')}</p>
                             <TextArea
                                 value={project?.description || "-"}
                                 readOnly
-                                className="text-sm min-h-[80px]"
+                                className="text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-0 focus:border-primary-300 min-h-[100px] transition-colors duration-200"
                             />
                         </div>
                     </div>

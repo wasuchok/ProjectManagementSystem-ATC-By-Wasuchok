@@ -26,7 +26,7 @@ export default tseslint.config(
   },
   {
     rules: {
-      // ✅ ปิดข้อที่เตือนบ่อยเกินไปสำหรับ NestJS/Prisma
+      // ✅ ปิด rule ที่เตือนบ่อยเกินไปสำหรับ NestJS/Prisma
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
@@ -34,11 +34,17 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-floating-promises': 'off',
 
-      // ✅ เปิดแค่ rule ที่ช่วยเรื่องความสะอาดของโค้ด
-      'no-unused-vars': 'warn',
+      // ✅ ใช้ rule no-unused-vars ของ TypeScript (แทนของ eslint core)
+      'no-unused-vars': 'off', // ปิดของ core
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+
+      // ✅ อนุญาต console.log
       'no-console': 'off',
 
-      // ✅ จัดรูปแบบตาม Prettier
+      // ✅ ปรับให้ใช้ prettier เสมอ
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },

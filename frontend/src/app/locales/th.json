@@ -60,7 +60,13 @@
         "list_of_employees": "รายชื่อพนักงาน",
         "my_invitations": "คำเชิญของฉัน",
         "no_invitations": "ไม่มีคำเชิญในขณะนี้",
-        "no_member": "ไม่มีสมาชิกในโปรเจกต์นี้"
+        "no_member": "ไม่มีสมาชิกในโปรเจกต์นี้",
+        "task_status_title": "หัวข้องาน",
+        "default_status": "ค่าเริ่มต้น",
+        "done_status": "เสร็จสิ้น",
+        "cancel": "ยกเลิก",
+        "add": "เพิ่ม",
+        "edit": "แก้ไข"
     },
     "table": {
         "showing_page": "หน้าที่",
