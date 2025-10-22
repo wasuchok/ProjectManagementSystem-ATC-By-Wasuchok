@@ -213,14 +213,26 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         }
     };
 
-    const InfoItem = ({ icon: Icon, label, value }: any) => (
-        <div className="flex items-start gap-3 py-2 px-2 rounded-md hover:bg-gray-50 transition-colors duration-200 border-l-2 border-primary-200 bg-white">
-            <div className="text-primary-500 mt-0.5 flex-shrink-0">
-                <Icon size={16} />
-            </div>
-            <div className="flex-1">
-                <p className="text-xs font-medium text-gray-600 mb-1">{label}</p>
-                <p className="text-sm font-medium text-gray-900 break-words">{value || "-"}</p>
+    const InfoItem = ({ icon: Icon, label, value, variant = "default", chipClass = "" }: any) => (
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+            <div className="flex items-start gap-3">
+                <div className="text-gray-500 mt-0.5 flex-shrink-0">
+                    <Icon size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{label}</p>
+                    {variant === "code" ? (
+                        <span className="inline-flex items-center font-mono text-sm px-2 py-1 rounded-md bg-gray-100 text-gray-800 border border-gray-200">
+                            {value || "-"}
+                        </span>
+                    ) : variant === "chip" ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full font-medium ${chipClass}`}>
+                            {value || "-"}
+                        </span>
+                    ) : (
+                        <p className="text-sm font-semibold text-gray-900 truncate">{value || "-"}</p>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -235,8 +247,12 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         const currentColor = task.color || "#3B82F6";
 
         return (
-            <div ref={setNodeRef} style={style} className={`bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all duration-200 ${isDragging ? 'opacity-75 ring-2 ring-primary-500/50 shadow-lg' : ''}`}>
-                {/* Main row: Drag/Order + Name + Color */}
+            <div
+                ref={setNodeRef}
+                style={{ ...style, borderLeftColor: currentColor, borderLeftWidth: 4, borderLeftStyle: 'solid' }}
+                className={`bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all duration-200 ${isDragging ? 'opacity-75 ring-2 ring-primary-500/50 shadow-lg' : ''}`}
+            >
+
                 <div className="flex items-center gap-4 mb-3">
                     <div className="flex-shrink-0 w-8">
                         {isEditMode ? (
@@ -251,7 +267,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     <div className="flex-1 min-w-0">
                         <TextField
                             fieldSize="sm"
-                            placeholder={`หัวข้องานที่ ${index + 1}`}
+                            placeholder={`ชื่อหัวข้องาน...`}
                             value={task.name || task.title || ""}
                             onChange={(e) => handleChangeName(task.id, e.target.value)}
                             onFocus={() => setFocusedTaskId(task.id)}
@@ -280,7 +296,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 </div>
 
                 {/* Status row */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between border-t pt-3">
                     <div className="flex items-center gap-4 flex-wrap">
                         {isEditMode ? (
                             <>
@@ -370,69 +386,78 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             <div className="space-y-5">
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {[
-                        {
-                            icon: FiHash,
-                            label: t('project.join_code'),
-                            value: project?.join_code || "-"
-                        },
-                        {
-                            icon: FiCalendar,
-                            label: t('project.table_created_at'),
-                            value: project?.created_at || "-"
-                        },
-                        {
-                            icon: FiFlag,
-                            label: t('project.table_priority'),
-                            value: project?.priority === "urgent" ? "เร่งด่วน (Urgent)" : project?.priority === "high" ? "สูง (High)" : project?.priority === "normal" ? "ปกติ (Normal)" : "ต่ำ (Low)"
-                        },
-                        {
-                            icon: FiFlag,
-                            label: t('project.table_status'),
-                            value: project?.status === "draft" ? "ร่าง (Draft)" : project?.status === "started" ? "เริ่มต้นแล้ว (Started)" : project?.status === "completed" ? "เสร็จสิ้น (Completed)" : project?.status === "cancelled" ? "ยกเลิก (Cancelled)" : "-"
-                        }
-                    ].map((item, index) => (
-                        <InfoItem key={index} {...item} />
-                    ))}
+                    {(() => {
+                        const priorityLabel = project?.priority === "urgent"
+                            ? "เร่งด่วน (Urgent)"
+                            : project?.priority === "high"
+                                ? "สูง (High)"
+                                : project?.priority === "normal"
+                                    ? "ปกติ (Normal)"
+                                    : project?.priority === "low"
+                                        ? "ต่ำ (Low)"
+                                        : "-";
+
+                        const priorityClass = project?.priority === "urgent"
+                            ? "bg-red-50 text-red-700 border border-red-200"
+                            : project?.priority === "high"
+                                ? "bg-orange-50 text-orange-700 border border-orange-200"
+                                : project?.priority === "low"
+                                    ? "bg-green-50 text-green-700 border border-green-200"
+                                    : "bg-gray-100 text-gray-700 border border-gray-300";
+
+                        const statusLabel = project?.status === "draft"
+                            ? "ร่าง (Draft)"
+                            : project?.status === "started"
+                                ? "เริ่มต้นแล้ว (Started)"
+                                : project?.status === "completed"
+                                    ? "เสร็จสิ้น (Completed)"
+                                    : project?.status === "cancelled"
+                                        ? "ยกเลิก (Cancelled)"
+                                        : "-";
+
+                        const statusClass = project?.status === "completed"
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : project?.status === "started"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : project?.status === "cancelled"
+                                    ? "bg-red-50 text-red-700 border border-red-200"
+                                    : "bg-gray-100 text-gray-700 border border-gray-300";
+
+                        return (
+                            <>
+                                <InfoItem icon={FiHash} label={t('project.join_code')} value={project?.join_code || '-'} variant="code" />
+                                <InfoItem icon={FiCalendar} label={t('project.table_created_at')} value={project?.created_at || '-'} />
+                                <InfoItem icon={FiFlag} label={t('project.table_priority')} value={priorityLabel} variant="chip" chipClass={priorityClass} />
+                                <InfoItem icon={FiFlag} label={t('project.table_status')} value={statusLabel} variant="chip" chipClass={statusClass} />
+                            </>
+                        );
+                    })()}
                 </div>
 
-                <div className="border border-gray-100 rounded-xl p-6 bg-white space-y-4 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-gray-700">
-                            หัวข้องาน ({taskList.length})
+                <div className="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm">
+                    <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b px-6 py-3 flex items-center justify-between">
+                        <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                            หัวข้องาน
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 border border-gray-200">{taskList.length}</span>
                         </p>
                         <div className="flex items-center gap-2">
                             {!isEditMode ? (
-                                <CustomButton
-                                    size="sm"
-
-                                    onClick={startEdit}
-                                    className="flex items-center gap-1"
-                                >
+                                <CustomButton size="sm" onClick={startEdit} className="flex items-center gap-1">
                                     <FiEdit2 size={14} /> แก้ไข
                                 </CustomButton>
                             ) : (
                                 <>
-                                    <CustomButton
-                                        size="sm"
-
-                                        onClick={handleCancelEdit}
-                                        className="flex items-center gap-1 text-gray-600 hover:text-gray-800"
-                                    >
+                                    <CustomButton size="sm" variant="outline" onClick={handleCancelEdit} className="flex items-center gap-1 text-gray-600 hover:text-gray-800">
                                         <FiX size={14} /> ยกเลิก
                                     </CustomButton>
-                                    <CustomButton
-                                        size="sm"
-                                        onClick={handleDoneEdit}
-                                        className="flex items-center gap-1"
-                                    >
+                                    <CustomButton size="sm" onClick={handleDoneEdit} className="flex items-center gap-1">
                                         <FiCheck size={14} /> เสร็จสิ้น
                                     </CustomButton>
                                 </>
                             )}
                             <button
                                 onClick={handleAddTask}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-primary-600 border border-primary-300 hover:bg-primary-50 transition disabled:opacity-50"
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition disabled:opacity-50"
                                 disabled={!isEditMode}
                             >
                                 <FiPlus size={14} /> เพิ่ม
@@ -441,7 +466,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     </div>
 
                     {taskList.length > 0 ? (
-                        <div className="space-y-4 max-h-96 overflow-y-auto">
+                        <div className="space-y-4 max-h-[28rem] overflow-y-auto p-6">
                             {isEditMode ? (
                                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                                     <SortableContext items={taskList.map((t: any) => String(t.id))} strategy={verticalListSortingStrategy}>
@@ -457,7 +482,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                             )}
                         </div>
                     ) : (
-                        <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                        <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 m-6">
                             <FiClipboard className="text-gray-300 mx-auto mb-3" size={48} />
                             <p className="text-sm text-gray-500 mb-4">ยังไม่มีหัวข้องาน</p>
                             <button
