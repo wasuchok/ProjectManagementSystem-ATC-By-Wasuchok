@@ -1,6 +1,7 @@
 "use client";
 
 import ModalAddTask from "@/app/components/boards/modal/ModalAddTask";
+import MinimalModal from "@/app/components/MinimalModal";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { decodeSingleHashid } from "@/app/utils/hashids";
 import {
@@ -14,11 +15,17 @@ import { ReactNode, useEffect, useState } from "react";
 import {
     FaPlus
 } from "react-icons/fa";
+import { FiCalendar, FiFlag, FiHash, FiUser, FiChevronRight } from "react-icons/fi";
 
 type Task = {
     id: string;
     title: string;
     priority?: string;
+    description?: string;
+    assignedTo?: string;
+    progressPercent?: string;
+    createdAt?: string;
+    updatedAt?: string;
 };
 
 type Board = {
@@ -33,6 +40,8 @@ type Board = {
 export default function KanbanBoard() {
     const [boards, setBoards] = useState<Board[]>([])
     const [openModalIsDefault, setOpenModalIsDefault] = useState(false)
+    const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
 
     const { id } = useParams()
 
@@ -59,6 +68,69 @@ export default function KanbanBoard() {
         },
     };
 
+    const normalizeTaskData = (task: any): Task => ({
+        id: String(task.id),
+        title: task.title ?? task.name ?? "",
+        priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
+        description: task.description ?? task.details ?? "",
+        assignedTo: task.assigned_to ?? task.assignedTo ?? task.assignee ?? undefined,
+        progressPercent: task.progress_percent != null ? String(task.progress_percent) : task.progressPercent ?? undefined,
+        createdAt: task.created_at ?? task.createdAt ?? undefined,
+        updatedAt: task.updated_at ?? task.updatedAt ?? undefined,
+    });
+
+    const handleOpenTaskModal = (task: Task) => {
+        setSelectedTask(task);
+        setIsTaskModalOpen(true);
+    };
+
+    const handleCloseTaskModal = () => {
+        setSelectedTask(null);
+        setIsTaskModalOpen(false);
+    };
+
+    const formatDateTime = (value?: string) => {
+        if (!value) return "-";
+        try {
+            const date = new Date(value);
+            return new Intl.DateTimeFormat("th-TH", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+            }).format(date);
+        } catch (error) {
+            return value;
+        }
+    };
+
+    const getProgressValue = (value?: string) => {
+        if (!value) return 0;
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) return 0;
+        return Math.min(100, Math.max(0, numeric));
+    };
+
+    const getProgressAppearance = (value: number) => {
+        let glowColor = "rgba(14,165,233,0.55)";
+
+        if (value <= 25) {
+            glowColor = "rgba(16,185,129,0.55)";
+        } else if (value <= 50) {
+            glowColor = "rgba(14,165,233,0.55)";
+        } else if (value <= 75) {
+            glowColor = "rgba(234,179,8,0.55)";
+        } else {
+            glowColor = "rgba(239,68,68,0.55)";
+        }
+
+        return {
+            gradient: "linear-gradient(90deg, #34d399 0%, #22d3ee 30%, #facc15 55%, #fb923c 75%, #ef4444 100%)",
+            glowColor,
+        };
+    };
+
     const fetchTaskProject = async (boardsFromStatus?: Board[]) => {
         const baseBoards = boardsFromStatus ?? boards;
         if (!id || baseBoards.length === 0) return;
@@ -71,11 +143,7 @@ export default function KanbanBoard() {
                 const boardsWithTasks = baseBoards.map((board) => {
                     const tasksForBoard = tasks
                         .filter((task: any) => String(task.status_id) === board.id)
-                        .map((task: any) => ({
-                            id: String(task.id),
-                            title: task.title ?? "",
-                            priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
-                        }));
+                        .map((task: any) => normalizeTaskData(task));
 
                     return {
                         ...board,
@@ -100,11 +168,7 @@ export default function KanbanBoard() {
                 const normalizedBoards = statuses.map((status: any) => ({
                     id: String(status.id),
                     title: status.name,
-                    tasks: status.tasks ? status.tasks.map((task: any) => ({
-                        id: String(task.id),
-                        title: task.name ?? task.title ?? "",
-                        priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
-                    })) : [],
+                    tasks: status.tasks ? status.tasks.map((task: any) => normalizeTaskData(task)) : [],
                     isDefault: Boolean(status.is_default),
                     color: status.color ? String(status.color) : undefined,
                 }));
@@ -165,9 +229,38 @@ export default function KanbanBoard() {
     };
 
     return (
-        <div className="relative">
+        <>
+            <style jsx global>{`
+                @keyframes kanban-progress-gradient {
+                    0% {
+                        background-position: 0% 50%;
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                    }
+                    100% {
+                        background-position: 0% 50%;
+                    }
+                }
+
+                @keyframes kanban-progress-glow {
+                    0%,
+                    100% {
+                        box-shadow: 0 0 12px -6px var(--glow-color, rgba(59, 130, 246, 0.45));
+                    }
+                    50% {
+                        box-shadow: 0 0 22px -4px var(--glow-color, rgba(59, 130, 246, 0.65));
+                    }
+                }
+
+                .progress-bar-fill {
+                    animation: kanban-progress-gradient 4s ease-in-out infinite,
+                        kanban-progress-glow 2.8s ease-in-out infinite;
+                }
+            `}</style>
+            <div className="relative min-h-[82vh] rounded-3xl border border-slate-100 bg-slate-50/80 p-6">
             <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="flex gap-6 overflow-x-auto pb-6 px-1">
+                <div className="flex gap-6 overflow-x-auto pb-4">
                     {boards.map((board) => {
                         const tasks = board.tasks ?? [];
 
@@ -177,7 +270,7 @@ export default function KanbanBoard() {
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`group flex flex-col rounded-2xl border border-transparent bg-gradient-to-b from-white via-slate-50 to-slate-100 shadow-[0_14px_30px_-18px_rgba(15,23,42,0.4)] transition-all duration-200 hover:border-primary-100 hover:shadow-[0_20px_45px_-20px_rgba(15,23,42,0.5)] ${snapshot.isDraggingOver ? "ring-2 ring-offset-2 ring-primary-300" : ""}`}
+                                        className={`group flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_-22px_rgba(15,23,42,0.5)] transition-all duration-200 hover:border-primary-200/60 hover:shadow-[0_18px_38px_-24px_rgba(15,23,42,0.45)] ${snapshot.isDraggingOver ? "ring-2 ring-primary-200/60" : ""}`}
                                         style={{
                                             width: "20rem",
                                             maxHeight: "82vh",
@@ -186,27 +279,32 @@ export default function KanbanBoard() {
                                         }}
                                     >
                                         <div
-                                            className="flex items-center justify-between rounded-t-xl px-5 py-4 text-sm text-white"
+                                            className="flex items-center justify-between rounded-t-xl px-5 py-4 text-sm text-slate-700"
                                             style={{
-                                                background: board.color ?? "#1f2937",
+                                                background: "#ffffff",
                                             }}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-white/10 text-xs font-semibold uppercase">
+                                                <div
+                                                    className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-600"
+                                                    style={{
+                                                        color: board.color ?? "#1f2937",
+                                                    }}
+                                                >
                                                     {(board.title ?? "?").slice(0, 2)}
                                                 </div>
                                                 <div>
                                                     <h2 className="font-semibold text-base leading-tight">
                                                         {board.title}
                                                     </h2>
-                                                    <span className="text-xs text-white/70">
+                                                    <span className="text-xs text-slate-400">
                                                         {tasks.length} งาน
                                                     </span>
                                                 </div>
                                             </div>
                                             {board.isDefault && (
                                                 <button
-                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-white/10 text-white transition hover:bg-white/20"
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-500"
                                                     type="button"
                                                     aria-label="Add task"
                                                     onClick={() => {
@@ -225,7 +323,7 @@ export default function KanbanBoard() {
                                             }}
                                         >
                                             {tasks.length === 0 && (
-                                                <div className="flex h-[130px] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-400">
+                                                <div className="flex h-[130px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
                                                     วางการ์ดที่นี่
                                                 </div>
                                             )}
@@ -235,6 +333,9 @@ export default function KanbanBoard() {
                                                 const badgeClass = priorityMeta?.badgeClass ?? "border-slate-200 bg-slate-100 text-slate-500";
                                                 const dotClass = priorityMeta?.dotClass ?? "bg-slate-400";
                                                 const priorityLabel = priorityMeta?.label ?? (task.priority ? `${task.priority.charAt(0).toUpperCase()}${task.priority.slice(1)}` : "No Priority");
+                                                const progressValue = getProgressValue(task.progressPercent);
+                                                const hasProgress = task.progressPercent != null && task.progressPercent !== "";
+                                                const progressAppearance = getProgressAppearance(progressValue);
 
                                                 return (
                                                     <Draggable
@@ -247,43 +348,63 @@ export default function KanbanBoard() {
                                                                 ref={provided.innerRef}
                                                                 {...provided.draggableProps}
                                                                 {...provided.dragHandleProps}
-                                                                className={`relative flex flex-col gap-3 rounded-xl border border-transparent bg-white/90 p-4 text-sm text-gray-700 shadow-[0_14px_35px_-22px_rgba(15,23,42,0.65)] backdrop-blur-sm transition-all duration-200 ${snapshot.isDragging
-                                                                    ? "scale-[1.02] border-primary-200 shadow-[0_22px_40px_-18px_rgba(59,130,246,0.45)]"
-                                                                    : "hover:border-primary-200 hover:shadow-[0_20px_36px_-22px_rgba(59,130,246,0.35)]"
+                                                                className={`relative flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.45)] transition-all duration-200 ${snapshot.isDragging
+                                                                    ? "scale-[1.01] border-primary-200 shadow-[0_18px_38px_-24px_rgba(59,130,246,0.35)]"
+                                                                    : "hover:border-primary-200 hover:shadow-[0_16px_30px_-24px_rgba(59,130,246,0.22)]"
                                                                     }`}
                                                             >
                                                                 <div className="flex items-start justify-between gap-3">
-                                                                    <div className="text-sm font-semibold leading-snug text-gray-800">
+                                                                    <h3 className="text-sm font-semibold leading-snug text-slate-800">
                                                                         {task.title}
-                                                                    </div>
-                                                                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                        <span className="text-[10px] font-medium text-slate-400">ID</span>
-                                                                        <span className="text-slate-600">{task.id}</span>
-                                                                    </div>
+                                                                    </h3>
+                                                                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold tracking-wide text-slate-500">
+                                                                        #{task.id}
+                                                                    </span>
                                                                 </div>
-                                                                <div className="flex flex-wrap items-center gap-2 text-xs">
+
+                                                                {hasProgress && (
+                                                                    <div className="space-y-1.5">
+                                                                        <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                                                            <span>Progress</span>
+                                                                            <span className="text-slate-500">{progressValue}%</span>
+                                                                        </div>
+                                                                        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                                                                            <div
+                                                                                className="progress-bar-fill absolute inset-y-0 left-0 rounded-full"
+                                                                                style={{
+                                                                                    width: `${progressValue}%`,
+                                                                                    background: progressAppearance.gradient,
+                                                                                    backgroundSize: "200% 100%",
+                                                                                    ["--glow-color" as any]: progressAppearance.glowColor,
+                                                                                }}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
                                                                     <div
                                                                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold uppercase tracking-wide ${badgeClass}`}
                                                                     >
                                                                         <span className={`h-2 w-2 rounded-full ${dotClass}`} />
                                                                         {priorityLabel}
                                                                     </div>
-                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                                                                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                                                                        รายละเอียด
-                                                                    </span>
-                                                                </div>
-                                                                <div className="flex items-center justify-between text-xs text-slate-500">
-                                                                    <span className="flex items-center gap-2 text-[11px] font-medium">
-                                                                        <span className="h-1.5 w-1.5 rounded-full bg-primary-300" />
-                                                                        Drag เพื่อเปลี่ยนสถานะ
-                                                                    </span>
                                                                     <button
                                                                         type="button"
-                                                                        className="text-[11px] font-semibold text-primary-500 transition hover:text-primary-600"
+                                                                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-200"
+                                                                        onClick={() => handleOpenTaskModal(task)}
                                                                     >
-                                                                        ดูเพิ่มเติม
+                                                                        <span className="h-1 w-1 rounded-full bg-slate-300" />
+                                                                        ดูรายละเอียด
+                                                                        <FiChevronRight size={12} />
                                                                     </button>
+                                                                </div>
+                                                                <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
+                                                                    <span className="inline-flex items-center gap-2">
+                                                                        <span className="h-1 w-1 rounded-full bg-primary-200" />
+                                                                        Drag เพื่อเปลี่ยนสถานะ
+                                                                    </span>
+                                                                    <FiChevronRight className="text-slate-300" size={13} />
                                                                 </div>
                                                             </div>
                                                         )}
@@ -301,11 +422,122 @@ export default function KanbanBoard() {
                 </div>
             </DragDropContext>
 
+            {selectedTask && (
+                <MinimalModal
+                    isOpen={isTaskModalOpen}
+                    onClose={handleCloseTaskModal}
+                    title={selectedTask.title || "รายละเอียดงาน"}
+                    width="max-w-lg"
+                >
+                    <div className="space-y-5 text-sm text-slate-600">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {(() => {
+                                const priorityMeta = selectedTask.priority ? priorityConfig[selectedTask.priority] : undefined;
+                                const badgeClass = priorityMeta?.badgeClass ?? "border-slate-200 bg-slate-100 text-slate-500";
+                                const dotClass = priorityMeta?.dotClass ?? "bg-slate-400";
+                                const priorityLabel = priorityMeta?.label ?? (selectedTask.priority ? `${selectedTask.priority.charAt(0).toUpperCase()}${selectedTask.priority.slice(1)}` : "No Priority");
+
+                                return (
+                                    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${badgeClass}`}>
+                                        <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
+                                        {priorityLabel}
+                                    </span>
+                                );
+                            })()}
+                            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
+                                <FiHash size={14} className="text-slate-400" />
+                                {selectedTask.id}
+                            </span>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-600">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                                รายละเอียด
+                            </p>
+                            <p className="whitespace-pre-line">
+                                {selectedTask.description?.trim()
+                                    ? selectedTask.description
+                                    : "ยังไม่มีการระบุรายละเอียดสำหรับงานนี้"}
+                            </p>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1.5">
+                                    <FiUser size={14} />
+                                    ผู้รับผิดชอบ
+                                </div>
+                                <p className="text-sm font-medium text-slate-700">
+                                    {selectedTask.assignedTo ?? "ยังไม่มอบหมาย"}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-2">
+                                    <FiFlag size={14} />
+                                    ความคืบหน้า
+                                </div>
+                                {selectedTask.progressPercent != null && selectedTask.progressPercent !== "" ? (
+                                    <div className="space-y-2">
+                                        {(() => {
+                                            const progressValue = getProgressValue(selectedTask.progressPercent);
+                                            const appearance = getProgressAppearance(progressValue);
+                                            return (
+                                                <>
+                                        <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 uppercase tracking-wide">
+                                            <span>สถานะ</span>
+                                            <span className="text-slate-600">{progressValue}%</span>
+                                        </div>
+                                        <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-slate-100 shadow-inner">
+                                            <div
+                                                className="progress-bar-fill h-full rounded-full transition-all duration-500 ease-out"
+                                                style={{
+                                                    width: `${progressValue}%`,
+                                                    background: appearance.gradient,
+                                                    backgroundSize: "200% 100%",
+                                                    ["--glow-color" as any]: appearance.glowColor,
+                                                }}
+                                            />
+                                        </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm font-medium text-slate-700">
+                                        ยังไม่ระบุ
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1.5">
+                                    <FiCalendar size={14} />
+                                    สร้างเมื่อ
+                                </div>
+                                <p className="text-sm font-medium text-slate-700">
+                                    {formatDateTime(selectedTask.createdAt)}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1.5">
+                                    <FiCalendar size={14} />
+                                    อัปเดตล่าสุด
+                                </div>
+                                <p className="text-sm font-medium text-slate-700">
+                                    {formatDateTime(selectedTask.updatedAt)}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </MinimalModal>
+            )}
+
             {openModalIsDefault && (
                 <ModalAddTask open={openModalIsDefault} setOpen={setOpenModalIsDefault} project_id={decodeSingleHashid(String(id))} boards={boards} />
             )}
-        </div>
-
-
+            </div>
+        </>
     );
 }

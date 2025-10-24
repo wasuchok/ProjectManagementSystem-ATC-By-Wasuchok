@@ -26,6 +26,7 @@ model user_account {
   sect                String?               @db.VarChar(10)
   tb_project_members  tb_project_members[]
   tb_project_projects tb_project_projects[]
+  tb_project_tasks    tb_project_tasks[]
   user_account        user_account?         @relation("user_accountTouser_account", fields: [create_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_create_by")
   other_user_account  user_account[]        @relation("user_accountTouser_account")
 
@@ -64,6 +65,7 @@ model tb_project_projects {
   tb_project_members       tb_project_members[]
   user_account             user_account?                @relation(fields: [created_by], references: [user_id], onUpdate: SetNull, map: "fk_created_by")
   tb_project_task_statuses tb_project_task_statuses[]
+  tb_project_tasks         tb_project_tasks[]
 
   @@index([created_by], map: "fk_created_by")
 }
@@ -79,21 +81,29 @@ model tb_project_task_statuses {
   created_at          DateTime?           @default(now()) @db.DateTime(0)
   updated_at          DateTime?           @default(now()) @db.DateTime(0)
   tb_project_projects tb_project_projects @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_project_id")
+  tb_project_tasks    tb_project_tasks[]
 
   @@index([project_id], map: "fk_task_project_id")
 }
 
 model tb_project_tasks {
-  id               Int                       @id @default(autoincrement())
-  project_id       Int
-  title            String?                   @db.VarChar(255)
-  description      String?                   @db.Text
-  status_id        Int
-  assigned_to      String                    @db.VarChar(255)
-  priority         tb_project_tasks_priority
-  progress_percent Decimal?                  @db.Decimal(5, 2)
-  created_at       DateTime                  @default(now()) @db.DateTime(0)
-  updated_at       DateTime                  @default(now()) @db.DateTime(0)
+  id                       Int                       @id @default(autoincrement())
+  project_id               Int
+  title                    String?                   @db.VarChar(255)
+  description              String?                   @db.Text
+  status_id                Int
+  assigned_to              String                    @db.VarChar(255)
+  priority                 tb_project_tasks_priority
+  progress_percent         Decimal?                  @default(0.00) @db.Decimal(5, 2)
+  created_at               DateTime                  @default(now()) @db.DateTime(0)
+  updated_at               DateTime                  @default(now()) @db.DateTime(0)
+  user_account             user_account              @relation(fields: [assigned_to], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_assignedto")
+  tb_project_projects      tb_project_projects       @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_project_id")
+  tb_project_task_statuses tb_project_task_statuses  @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_status_id")
+
+  @@index([assigned_to], map: "fk_tasks_assignedto")
+  @@index([project_id], map: "fk_tasks_project_id")
+  @@index([status_id], map: "fk_tasks_status_id")
 }
 
 enum tb_project_members_status {

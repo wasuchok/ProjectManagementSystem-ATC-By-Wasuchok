@@ -120,39 +120,51 @@ const Page = () => {
             header: t("project.table_priority"),
             accessor: "priority",
             render: (value: any) => {
-                let styleClass = "bg-gray-100 text-gray-600 border border-gray-200";
-                let text = value;
-                let icon = null;
+                const palette: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+                    low: {
+                        label: t("project.priority_low"),
+                        bg: "bg-emerald-50",
+                        text: "text-emerald-600",
+                        border: "border-emerald-200",
+                        dot: "bg-emerald-400",
+                    },
+                    normal: {
+                        label: t("project.priority_normal"),
+                        bg: "bg-sky-50",
+                        text: "text-sky-600",
+                        border: "border-sky-200",
+                        dot: "bg-sky-400",
+                    },
+                    high: {
+                        label: t("project.priority_high"),
+                        bg: "bg-amber-50",
+                        text: "text-amber-600",
+                        border: "border-amber-200",
+                        dot: "bg-amber-400",
+                    },
+                    urgent: {
+                        label: t("project.priority_urgent"),
+                        bg: "bg-rose-50",
+                        text: "text-rose-600",
+                        border: "border-rose-200",
+                        dot: "bg-rose-400",
+                    },
+                };
 
-                switch (value) {
-                    case "low":
-                        styleClass = "bg-green-50 text-green-700 border border-green-200";
-                        text = t("project.priority_low");
-                        icon = "🟢";
-                        break;
-                    case "normal":
-                        styleClass = "bg-blue-50 text-blue-700 border border-blue-200";
-                        text = t("project.priority_normal");
-                        icon = "🔵";
-                        break;
-                    case "high":
-                        styleClass = "bg-orange-50 text-orange-700 border border-orange-200";
-                        text = t("project.priority_high");
-                        icon = "🟠";
-                        break;
-                    case "urgent":
-                        styleClass = "bg-red-50 text-red-700 border border-red-200";
-                        text = t("project.priority_urgent");
-                        icon = "🔴";
-                        break;
-                }
+                const config = palette[value as keyof typeof palette] ?? {
+                    label: value ?? "-",
+                    bg: "bg-slate-100",
+                    text: "text-slate-600",
+                    border: "border-slate-200",
+                    dot: "bg-slate-400",
+                };
 
                 return (
                     <span
-                        className={`${styleClass} inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full shadow-sm`}
+                        className={`${config.bg} ${config.text} inline-flex items-center gap-2 rounded-full border ${config.border} px-3 py-1 text-xs font-semibold`}
                     >
-                        <span className="text-base leading-none">{icon}</span>
-                        {text}
+                        <span className={`h-2 w-2 rounded-full ${config.dot}`} />
+                        {config.label}
                     </span>
                 );
             },
@@ -233,60 +245,87 @@ const Page = () => {
 
     return (
         <>
-            <div className="flex flex-col gap-2 mb-3">
-                <p className="text-2xl font-semibold">📁 {t("project.title")}</p>
-                <div className="flex gap-2 justify-between">
-                    <div className="flex gap-2">
-                        <TextField
-                            className=""
-                            fieldSize="sm"
-                            placeholder={`${t("project.search_placeholder")}`}
-                        />
-                        <CustomButton variant="secondary">{t('project.btn_search')}</CustomButton>
+            <div className="space-y-6">
+                <div className="flex flex-col gap-5 rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:flex-row md:items-center md:justify-between">
+                    <div className="space-y-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                            {t("project.title")}
+                        </span>
+                        <h1 className="text-2xl font-semibold text-slate-800">
+                            📁 {t("project.title")}
+                        </h1>
+                        <p className="max-w-xl text-sm text-slate-500">
+                            Keep track of your ongoing projects and manage invitations from teammates in one focused view.
+                        </p>
                     </div>
-                    <div className="flex gap-2">
-                        <div className="relative inline-block">
-                            {pendingCount > 0 && (
-                                <motion.div
-                                    className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-lg z-10"
-                                    initial={{ scale: 2, rotate: 5 }}
-                                    animate={{
-                                        scale: [1, 1.1, 0.95, 1.1, 1],
-                                        rotate: [-20, 2, -8, 10]
-                                    }}
-                                    transition={{
-                                        repeat: Infinity,
-                                        duration: 5.5,
-                                        ease: "easeInOut"
-                                    }}
-                                >
-                                    {pendingCount}
-                                </motion.div>
-                            )}
-
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative">
                             <CustomButton
                                 onClick={fetchInviteProjectEmployee}
-                                className="relative flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200 min-w-[140px] justify-center"
+                                className="relative inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600"
                             >
                                 <FiUsers size={16} />
                                 {t('project.my_invitations')}
+                                {pendingCount > 0 && (
+                                    <motion.span
+                                        className="absolute -top-2 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-sm"
+                                        initial={{ scale: 0.6, opacity: 0 }}
+                                        animate={{ scale: [0.9, 1.1, 1], opacity: 1 }}
+                                        transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 2.5 }}
+                                    >
+                                        {pendingCount}
+                                    </motion.span>
+                                )}
                             </CustomButton>
                         </div>
-                        <CustomButton onClick={() => router.push("/boards/create")}>{t('project.create')}</CustomButton>
+                        <CustomButton
+                            onClick={() => router.push("/boards/create")}
+                            className="inline-flex items-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-primary-600 hover:to-primary-700"
+                        >
+                            {t('project.create')}
+                        </CustomButton>
+                    </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-100 bg-white/90 p-5 shadow-sm backdrop-blur-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex w-full flex-col gap-2 md:w-auto md:flex-1 md:flex-row md:items-center">
+                            <TextField
+                                className="w-full md:flex-1 rounded-2xl border-slate-200 bg-slate-50/60 px-5 py-3 text-sm text-slate-700 transition focus:border-primary-300 focus:bg-white"
+                                fieldSize="md"
+                                placeholder={`${t("project.search_placeholder")}`}
+                            />
+                            <CustomButton
+                                variant="secondary"
+                                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600 md:w-auto"
+                            >
+                                {t('project.btn_search')}
+                            </CustomButton>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-500">
+                                Projects in view: {data.length}
+                            </span>
+                            <span className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-500 md:inline-flex">
+                                Pending invites: {pendingCount}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <ScrollableTable
-                columns={columns}
-                data={data}
-                loading={loading}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-            />
+            <div className="mt-6 rounded-3xl border border-slate-100 bg-white/90 p-3 shadow-sm backdrop-blur-sm">
+                <ScrollableTable
+                    columns={columns}
+                    data={data}
+                    loading={loading}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                />
+            </div>
 
             {openModalDetail && (
                 <ModalDetail

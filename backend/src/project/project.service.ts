@@ -3,6 +3,7 @@ import { ApiResponse } from 'src/common/dto/api-response.dto';
 import { EventsGateway } from 'src/event/events.gateway';
 import { PrismaService } from 'src/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { tb_project_members_status } from 'generated/prisma';
 
 @Injectable()
 export class ProjectService {
@@ -368,6 +369,9 @@ export class ProjectService {
       },
       orderBy: {
         updated_at: 'desc',
+      },
+      include: {
+        user_account: true,
       },
     });
 

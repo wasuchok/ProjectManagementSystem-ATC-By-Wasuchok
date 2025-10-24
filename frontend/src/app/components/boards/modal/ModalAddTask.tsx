@@ -16,7 +16,8 @@ const ModalAddTask = ({ open, setOpen, project_id, boards }: any) => {
     const {
         control,
         handleSubmit,
-        formState: { errors },
+        reset,
+        formState: { errors, isSubmitting },
     }: any = useForm({
         defaultValues: {
             title: "",
@@ -41,6 +42,8 @@ const ModalAddTask = ({ open, setOpen, project_id, boards }: any) => {
             const response = await apiPrivate.post("/project/task/add", sendData)
 
             console.log(response.data)
+            reset()
+            setOpen(false)
 
         } catch (error) {
             console.log(error)
@@ -52,18 +55,23 @@ const ModalAddTask = ({ open, setOpen, project_id, boards }: any) => {
             <MinimalModal
                 isOpen={open}
                 onClose={() => setOpen(false)}
-                title="สร้าง Task"
+                title={t('project.create_new_task_title')}
             >
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-7 text-sm text-slate-600">
+                    <p className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-xs leading-relaxed text-slate-500">
+                        {t('project.create_new_task_description')}
+                    </p>
 
-                    <div className="w-full">
+                    <div className="w-full rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                        <span className="mb-3 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            {t("project.priority")}
+                        </span>
                         <Controller
                             name="priority"
                             control={control}
                             rules={{ required: t("please_fill_in_information") }}
                             render={({ field }) => (
                                 <OptionList
-                                    label={t("project.priority")}
                                     value={field.value}
                                     onChange={field.onChange}
                                     options={priorityTypes}
@@ -75,58 +83,66 @@ const ModalAddTask = ({ open, setOpen, project_id, boards }: any) => {
                         />
                     </div>
 
-                    <div className="w-full">
-                        <Controller
-                            name="title"
-                            control={control}
-                            rules={{ required: t("please_fill_in_information") }}
-                            render={({ field }) => (
-                                <TextField
-                                    required
-                                    label="ชื่อหัวข้อ"
-                                    placeholder={t("please_fill_in_information")}
-                                    error={errors.title?.message}
-                                    {...field}
-                                    className="w-full"
-                                />
-                            )}
-                        />
+                    <div className="grid gap-4 rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                        <div className="w-full">
+                            <Controller
+                                name="title"
+                                control={control}
+                                rules={{ required: t("please_fill_in_information") }}
+                                render={({ field }) => (
+                                    <TextField
+                                        required
+                                        label={t('project.title')}
+                                        placeholder={t("please_fill_in_information")}
+                                        error={errors.title?.message}
+                                        {...field}
+                                        className="w-full"
+                                    />
+                                )}
+                            />
+                        </div>
+
+                        <div className="w-full">
+                            <Controller
+                                name="description"
+                                control={control}
+                                rules={{ required: t("please_fill_in_information") }}
+                                render={({ field }) => (
+                                    <TextArea
+                                        required
+                                        label={t('project.description')}
+                                        placeholder={t("please_fill_in_information")}
+                                        error={errors.description?.message}
+                                        {...field}
+                                        className="w-full"
+
+                                    />
+                                )}
+                            />
+                        </div>
+
+                        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 p-3 text-xs text-slate-400">
+                            {t('project.create_new_task_note')}
+                        </div>
                     </div>
 
-
-                    <div className="w-full">
-                        <Controller
-                            name="description"
-                            control={control}
-                            rules={{ required: t("please_fill_in_information") }}
-                            render={({ field }) => (
-                                <TextArea
-                                    required
-                                    label="รายละเอียด"
-                                    placeholder={t("please_fill_in_information")}
-                                    error={errors.description?.message}
-                                    {...field}
-                                    className="w-full"
-
-                                />
-                            )}
-                        />
-                    </div>
-
-
-                    <div className="flex justify-end space-x-3 pt-4">
+                    <div className="flex justify-end gap-3 pt-2">
                         <button
                             type="button"
-                            onClick={() => setOpen(false)}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
+                            onClick={() => {
+                                reset()
+                                setOpen(false)
+                            }}
+                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
                         >
-                            ยกเลิก
+                            {t('project.cancel')}
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                            disabled={isSubmitting}
+                            className="inline-flex items-center gap-2 rounded-full border border-primary-500 bg-primary-500 px-5 py-2 text-sm font-semibold text-white transition hover:border-primary-600 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:cursor-not-allowed disabled:opacity-70"
                         >
-                            สร้าง Task
+                            {isSubmitting ? "กำลังสร้าง..." : "สร้าง Task"}
                         </button>
                     </div>
                 </form>
