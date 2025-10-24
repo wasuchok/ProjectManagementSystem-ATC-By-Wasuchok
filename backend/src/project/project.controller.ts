@@ -101,4 +101,16 @@ export class ProjectController {
   async getTaskStatusByProjectID(@Param('project_id') project_id: string) {
     return this.projectService.getTaskStatusByProjectID(Number(project_id));
   }
+
+  @Post('/task/add')
+  @Roles('admin', 'staff')
+  async addTask(@Body() body: any) {
+    return this.projectService.addTaskProject(body);
+  }
+
+  @Get('/task/project/:project_id')
+  @Roles('admin', 'staff', 'employee')
+  async getTaskProject(@Param('project_id') project_id: string) {
+    return this.projectService.getTaskProject(Number(project_id));
+  }
 }

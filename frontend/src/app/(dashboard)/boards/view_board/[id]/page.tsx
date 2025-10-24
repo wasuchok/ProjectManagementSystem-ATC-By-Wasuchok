@@ -1,5 +1,6 @@
 "use client";
 
+import ModalAddTask from "@/app/components/boards/modal/ModalAddTask";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { decodeSingleHashid } from "@/app/utils/hashids";
 import {
@@ -30,7 +31,20 @@ type Board = {
 
 export default function KanbanBoard() {
     const [boards, setBoards] = useState<Board[]>([])
+    const [openModalIsDefault, setOpenModalIsDefault] = useState(false)
+
     const { id } = useParams()
+
+    const fetchTaskProject = async () => {
+        try {
+            const response = await apiPrivate.get(`/project/task/project/${decodeSingleHashid(String(id))}`)
+            if (response.status == 200) {
+                console.log(response.data.data)
+            }
+        } catch (error) {
+            console.log(error)
+        }
+    }
 
     const fetchAllStatusTask = async () => {
         try {
@@ -49,6 +63,7 @@ export default function KanbanBoard() {
                 }));
 
                 setBoards(normalizedBoards)
+                await fetchTaskProject()
             }
 
         } catch (error) {
@@ -147,6 +162,9 @@ export default function KanbanBoard() {
                                                     className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-white/10 text-white transition hover:bg-white/20"
                                                     type="button"
                                                     aria-label="Add task"
+                                                    onClick={() => {
+                                                        setOpenModalIsDefault(true)
+                                                    }}
                                                 >
                                                     <FaPlus size={14} />
                                                 </button>
@@ -196,12 +214,18 @@ export default function KanbanBoard() {
                                             {provided.placeholder}
                                         </div>
                                     </div>
-                            )}
+                                )}
                             </Droppable>
                         );
                     })}
                 </div>
             </DragDropContext>
+
+            {openModalIsDefault && (
+                <ModalAddTask open={openModalIsDefault} setOpen={setOpenModalIsDefault} project_id={decodeSingleHashid(String(id))} boards={boards} />
+            )}
         </div>
+
+
     );
 }

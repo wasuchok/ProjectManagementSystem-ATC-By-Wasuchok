@@ -83,6 +83,19 @@ model tb_project_task_statuses {
   @@index([project_id], map: "fk_task_project_id")
 }
 
+model tb_project_tasks {
+  id               Int                       @id @default(autoincrement())
+  project_id       Int
+  title            String?                   @db.VarChar(255)
+  description      String?                   @db.Text
+  status_id        Int
+  assigned_to      String                    @db.VarChar(255)
+  priority         tb_project_tasks_priority
+  progress_percent Decimal?                  @db.Decimal(5, 2)
+  created_at       DateTime                  @default(now()) @db.DateTime(0)
+  updated_at       DateTime                  @default(now()) @db.DateTime(0)
+}
+
 enum tb_project_members_status {
   invited
   joined
@@ -101,4 +114,11 @@ enum tb_project_projects_status {
   started
   completed
   cancelled
+}
+
+enum tb_project_tasks_priority {
+  low
+  normal
+  high
+  urgent
 }
