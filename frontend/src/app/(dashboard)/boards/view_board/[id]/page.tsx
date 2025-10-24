@@ -18,6 +18,7 @@ import {
 type Task = {
     id: string;
     title: string;
+    priority?: string;
 };
 
 type Board = {
@@ -35,11 +36,54 @@ export default function KanbanBoard() {
 
     const { id } = useParams()
 
-    const fetchTaskProject = async () => {
+    const priorityConfig: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
+        low: {
+            label: "Low",
+            badgeClass: "bg-emerald-50 text-emerald-600 border-emerald-100",
+            dotClass: "bg-emerald-500",
+        },
+        normal: {
+            label: "Normal",
+            badgeClass: "bg-sky-50 text-sky-600 border-sky-100",
+            dotClass: "bg-sky-500",
+        },
+        high: {
+            label: "High",
+            badgeClass: "bg-amber-50 text-amber-600 border-amber-100",
+            dotClass: "bg-amber-500",
+        },
+        urgent: {
+            label: "Urgent",
+            badgeClass: "bg-rose-50 text-rose-600 border-rose-100",
+            dotClass: "bg-rose-500",
+        },
+    };
+
+    const fetchTaskProject = async (boardsFromStatus?: Board[]) => {
+        const baseBoards = boardsFromStatus ?? boards;
+        if (!id || baseBoards.length === 0) return;
+
         try {
             const response = await apiPrivate.get(`/project/task/project/${decodeSingleHashid(String(id))}`)
             if (response.status == 200) {
-                console.log(response.data.data)
+                const tasks = Array.isArray(response.data.data) ? response.data.data : [];
+
+                const boardsWithTasks = baseBoards.map((board) => {
+                    const tasksForBoard = tasks
+                        .filter((task: any) => String(task.status_id) === board.id)
+                        .map((task: any) => ({
+                            id: String(task.id),
+                            title: task.title ?? "",
+                            priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
+                        }));
+
+                    return {
+                        ...board,
+                        tasks: tasksForBoard,
+                    };
+                });
+
+                setBoards(boardsWithTasks);
             }
         } catch (error) {
             console.log(error)
@@ -47,6 +91,8 @@ export default function KanbanBoard() {
     }
 
     const fetchAllStatusTask = async () => {
+        if (!id) return;
+
         try {
             const response = await apiPrivate.get(`/project/task-status/get-all-status-by-project/${decodeSingleHashid(String(id))}`)
             if (response.status == 200 || response.status == 201) {
@@ -57,13 +103,14 @@ export default function KanbanBoard() {
                     tasks: status.tasks ? status.tasks.map((task: any) => ({
                         id: String(task.id),
                         title: task.name ?? task.title ?? "",
+                        priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
                     })) : [],
                     isDefault: Boolean(status.is_default),
                     color: status.color ? String(status.color) : undefined,
                 }));
 
                 setBoards(normalizedBoards)
-                await fetchTaskProject()
+                await fetchTaskProject(normalizedBoards)
             }
 
         } catch (error) {
@@ -74,7 +121,7 @@ export default function KanbanBoard() {
     useEffect(() => {
         fetchAllStatusTask()
 
-    }, [])
+    }, [id])
 
 
     const handleDragEnd = (result: DropResult) => {
@@ -130,7 +177,7 @@ export default function KanbanBoard() {
                                     <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`flex flex-col rounded-2xl border border-gray-100 bg-gradient-to-b from-white to-slate-50 shadow-md transition-all duration-200 ${snapshot.isDraggingOver ? "ring-2 ring-offset-2 ring-primary-300" : ""}`}
+                                        className={`group flex flex-col rounded-2xl border border-transparent bg-gradient-to-b from-white via-slate-50 to-slate-100 shadow-[0_14px_30px_-18px_rgba(15,23,42,0.4)] transition-all duration-200 hover:border-primary-100 hover:shadow-[0_20px_45px_-20px_rgba(15,23,42,0.5)] ${snapshot.isDraggingOver ? "ring-2 ring-offset-2 ring-primary-300" : ""}`}
                                         style={{
                                             width: "20rem",
                                             maxHeight: "82vh",
@@ -183,33 +230,66 @@ export default function KanbanBoard() {
                                                 </div>
                                             )}
 
-                                            {tasks.map((task, index) => (
-                                                <Draggable
-                                                    key={task.id}
-                                                    draggableId={task.id}
-                                                    index={index}
-                                                >
-                                                    {(provided, snapshot) => (
-                                                        <div
-                                                            ref={provided.innerRef}
-                                                            {...provided.draggableProps}
-                                                            {...provided.dragHandleProps}
-                                                            className={`relative rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm transition-all ${snapshot.isDragging
-                                                                ? "scale-[1.02] border-primary-200 shadow-lg"
-                                                                : "hover:border-primary-200 hover:shadow-md"
-                                                                }`}
-                                                        >
-                                                            <div className="text-sm font-semibold text-gray-800">
-                                                                {task.title}
+                                            {tasks.map((task, index) => {
+                                                const priorityMeta = task.priority ? priorityConfig[task.priority] : undefined;
+                                                const badgeClass = priorityMeta?.badgeClass ?? "border-slate-200 bg-slate-100 text-slate-500";
+                                                const dotClass = priorityMeta?.dotClass ?? "bg-slate-400";
+                                                const priorityLabel = priorityMeta?.label ?? (task.priority ? `${task.priority.charAt(0).toUpperCase()}${task.priority.slice(1)}` : "No Priority");
+
+                                                return (
+                                                    <Draggable
+                                                        key={task.id}
+                                                        draggableId={task.id}
+                                                        index={index}
+                                                    >
+                                                        {(provided, snapshot) => (
+                                                            <div
+                                                                ref={provided.innerRef}
+                                                                {...provided.draggableProps}
+                                                                {...provided.dragHandleProps}
+                                                                className={`relative flex flex-col gap-3 rounded-xl border border-transparent bg-white/90 p-4 text-sm text-gray-700 shadow-[0_14px_35px_-22px_rgba(15,23,42,0.65)] backdrop-blur-sm transition-all duration-200 ${snapshot.isDragging
+                                                                    ? "scale-[1.02] border-primary-200 shadow-[0_22px_40px_-18px_rgba(59,130,246,0.45)]"
+                                                                    : "hover:border-primary-200 hover:shadow-[0_20px_36px_-22px_rgba(59,130,246,0.35)]"
+                                                                    }`}
+                                                            >
+                                                                <div className="flex items-start justify-between gap-3">
+                                                                    <div className="text-sm font-semibold leading-snug text-gray-800">
+                                                                        {task.title}
+                                                                    </div>
+                                                                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                                                        <span className="text-[10px] font-medium text-slate-400">ID</span>
+                                                                        <span className="text-slate-600">{task.id}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                                    <div
+                                                                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold uppercase tracking-wide ${badgeClass}`}
+                                                                    >
+                                                                        <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+                                                                        {priorityLabel}
+                                                                    </div>
+                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                                                                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                                                                        รายละเอียด
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between text-xs text-slate-500">
+                                                                    <span className="flex items-center gap-2 text-[11px] font-medium">
+                                                                        <span className="h-1.5 w-1.5 rounded-full bg-primary-300" />
+                                                                        Drag เพื่อเปลี่ยนสถานะ
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-[11px] font-semibold text-primary-500 transition hover:text-primary-600"
+                                                                    >
+                                                                        ดูเพิ่มเติม
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                            <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
-                                                                <span>รายละเอียดเพิ่มเติม</span>
-                                                                <span className="font-medium text-primary-500">ดู</span>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </Draggable>
-                                            ))}
+                                                        )}
+                                                    </Draggable>
+                                                );
+                                            })}
 
                                             {provided.placeholder}
                                         </div>
