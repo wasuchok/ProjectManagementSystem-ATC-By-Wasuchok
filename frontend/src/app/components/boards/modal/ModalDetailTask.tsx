@@ -1,3 +1,4 @@
+import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -99,6 +100,7 @@ const ModalDetailTask = ({
     availableAssignees,
     onTaskProgressChanged,
 }: ModalDetailTaskProps) => {
+    const { t } = useLanguage()
     const [subtasks, setSubtasks] = useState<SubtaskSummary[]>(() =>
         Array.isArray(selectedTask?.subtasks) ? selectedTask.subtasks.map((sub: any) => normalizeSubtask(sub)) : []
     );
@@ -384,7 +386,7 @@ const ModalDetailTask = ({
 
                     <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-600">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                            รายละเอียด
+                            {t('project.description')}
                         </p>
                         <p className="whitespace-pre-line">
                             {selectedTask.description?.trim()
@@ -397,7 +399,7 @@ const ModalDetailTask = ({
                         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                             <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1.5">
                                 <FiUser size={14} />
-                                ผู้รับผิดชอบ
+                                {t('project.assignee')}
                             </div>
                             <p className="text-sm font-medium text-slate-700">
                                 {selectedTask.assignedTo ?? "ยังไม่มอบหมาย"}
@@ -406,7 +408,7 @@ const ModalDetailTask = ({
                         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                             <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-2">
                                 <FiFlag size={14} />
-                                ความคืบหน้า
+                                {t('project.progress')}
                             </div>
                             {selectedTask.progressPercent != null && selectedTask.progressPercent !== "" ? (
                                 <div className="space-y-2">
@@ -416,7 +418,7 @@ const ModalDetailTask = ({
                                         return (
                                             <>
                                                 <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 uppercase tracking-wide">
-                                                    <span>สถานะ</span>
+                                                    <span>{t('project.table_status')}</span>
                                                     <span className="text-slate-600">{progressValue}%</span>
                                                 </div>
                                                 <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-slate-100 shadow-inner">
@@ -446,7 +448,7 @@ const ModalDetailTask = ({
                         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                             <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1.5">
                                 <FiCalendar size={14} />
-                                สร้างเมื่อ
+                                {t('project.table_created_at')}
                             </div>
                             <p className="text-sm font-medium text-slate-700">
                                 {formatDateTime(selectedTask.createdAt)}
@@ -455,7 +457,7 @@ const ModalDetailTask = ({
                         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                             <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1.5">
                                 <FiCalendar size={14} />
-                                อัปเดตล่าสุด
+                                {t('project.last_updated')}
                             </div>
                             <p className="text-sm font-medium text-slate-700">
                                 {formatDateTime(selectedTask.updatedAt)}
@@ -467,7 +469,7 @@ const ModalDetailTask = ({
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide">
                                 <FiList size={14} />
-                                งานย่อย
+                                {t('project.subtask')}
                             </div>
                             <button
                                 type="button"
@@ -475,7 +477,7 @@ const ModalDetailTask = ({
                                 className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600 transition hover:border-primary-300 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1"
                             >
                                 <FiPlus size={12} />
-                                {showAddForm ? "ยกเลิก" : "เพิ่มงานย่อย"}
+                                {showAddForm ? t("project.status_cancelled") : t("project.add_subtask")}
                             </button>
                         </div>
 
@@ -483,7 +485,7 @@ const ModalDetailTask = ({
                             <form className="mt-4 space-y-4" onSubmit={handleCreateSubtask}>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        ชื่องานย่อย <span className="text-rose-500">*</span>
+                                        {t('project.subtask_name')} <span className="text-rose-500">*</span>
                                     </label>
                                     <input
                                         type="text"
@@ -501,7 +503,7 @@ const ModalDetailTask = ({
 
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        รายละเอียดเพิ่มเติม
+                                        {t('project.additional_details')}
                                     </label>
                                     <textarea
                                         value={formValues.description}
@@ -520,7 +522,7 @@ const ModalDetailTask = ({
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            วันที่เริ่ม
+                                            {t('project.start_date')}
                                         </label>
                                         <input
                                             type="date"
@@ -548,7 +550,7 @@ const ModalDetailTask = ({
                                                 }
                                                 className="h-4 w-4 rounded border-slate-300 text-primary-500 focus:ring-primary-400"
                                             />
-                                            กำหนดวันครบกำหนด
+                                            {t('project.set_due_date')}
                                         </label>
                                         <input
                                             type="date"
@@ -568,7 +570,7 @@ const ModalDetailTask = ({
 
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        ความคืบหน้า (%)
+                                        {t('project.progress')} (%)
                                     </label>
                                     <input
                                         type="number"
@@ -588,7 +590,7 @@ const ModalDetailTask = ({
 
                                 <div className="space-y-2">
                                     <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        ผู้รับผิดชอบงานย่อย
+                                        {t('project.subtask_assignee')}
                                     </label>
                                     {availableAssignees.length > 0 ? (
                                         <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -599,8 +601,8 @@ const ModalDetailTask = ({
                                                         <label
                                                             key={assignee.userId}
                                                             className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition ${isChecked
-                                                                    ? "border-primary-300 bg-primary-50 text-primary-600"
-                                                                    : "border-slate-200 bg-slate-50 text-slate-500"
+                                                                ? "border-primary-300 bg-primary-50 text-primary-600"
+                                                                : "border-slate-200 bg-slate-50 text-slate-500"
                                                                 }`}
                                                         >
                                                             <input
@@ -620,13 +622,13 @@ const ModalDetailTask = ({
                                             </div>
                                             {selectedAssigneeNames.length > 0 && (
                                                 <p className="mt-3 text-[11px] font-medium text-primary-600">
-                                                    เลือกแล้ว: {selectedAssigneeNames.join(", ")}
+                                                    {t('project.selected')}: {selectedAssigneeNames.join(", ")}
                                                 </p>
                                             )}
                                         </div>
                                     ) : (
                                         <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-500">
-                                            ยังไม่มีสมาชิกในโปรเจกต์ให้มอบหมาย
+                                            {t('project.no_project_members_to_assign')}
                                         </p>
                                     )}
                                 </div>
@@ -642,7 +644,7 @@ const ModalDetailTask = ({
                                         className="rounded-full border border-slate-200 px-4 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 focus:ring-offset-1"
                                         disabled={isSubmitting}
                                     >
-                                        ยกเลิก
+                                        {t('project.cancel')}
                                     </button>
                                     <button
                                         type="submit"
@@ -661,10 +663,10 @@ const ModalDetailTask = ({
 
                         <div className="mt-4 space-y-3">
                             {isLoadingSubtasks ? (
-                                <p className="text-xs text-slate-500">กำลังโหลดงานย่อย...</p>
+                                <p className="text-xs text-slate-500">{t('project.loading_subtasks')}</p>
                             ) : subtasks.length === 0 ? (
                                 <p className="text-xs text-slate-500">
-                                    ยังไม่มีงานย่อยสำหรับงานนี้
+                                    {t('project.no_subtasks_for_this_task')}
                                 </p>
                             ) : (
                                 subtasks.map((subtask) => {
@@ -743,7 +745,7 @@ const ModalDetailTask = ({
                                                 {subtask.updatedAt && (
                                                     <span className="inline-flex items-center gap-1">
                                                         <FiClock size={11} className="text-slate-300" />
-                                                        อัปเดต {formatDateOnly(subtask.updatedAt)}
+                                                        {t('project.update')} {formatDateOnly(subtask.updatedAt)}
                                                     </span>
                                                 )}
                                             </div>
@@ -754,7 +756,7 @@ const ModalDetailTask = ({
                                                         <form className="space-y-3 text-[11px]" onSubmit={handleUpdateSubtask}>
                                                             <div className="space-y-1">
                                                                 <label className="font-semibold text-slate-500 uppercase tracking-wide">
-                                                                    ปรับความคืบหน้า
+                                                                    {t('project.update_progress')}
                                                                 </label>
                                                                 <input
                                                                     type="range"
@@ -781,14 +783,14 @@ const ModalDetailTask = ({
                                                                     className="rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 focus:ring-offset-1"
                                                                     disabled={isUpdatingSubtask}
                                                                 >
-                                                                    ยกเลิก
+                                                                    {t('project.cancel')}
                                                                 </button>
                                                                 <button
                                                                     type="submit"
                                                                     disabled={isUpdatingSubtask}
                                                                     className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1 disabled:cursor-not-allowed disabled:bg-primary-300"
                                                                 >
-                                                                    {isUpdatingSubtask ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
+                                                                    {isUpdatingSubtask ? t("project.saving") : t("project.save_changes")}
                                                                 </button>
                                                             </div>
                                                         </form>
@@ -799,7 +801,7 @@ const ModalDetailTask = ({
                                                             className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-[11px] font-semibold text-primary-600 transition hover:border-primary-300 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1"
                                                         >
                                                             <FiEdit2 size={12} />
-                                                            ปรับเปอร์เซ็นต์
+                                                            {t('project.adjust_percentage')}
                                                         </button>
                                                     )}
                                                 </div>
