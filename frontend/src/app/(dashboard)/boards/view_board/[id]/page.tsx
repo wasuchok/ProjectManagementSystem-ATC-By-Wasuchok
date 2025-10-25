@@ -2,6 +2,7 @@
 
 import ModalAddTask from "@/app/components/boards/modal/ModalAddTask";
 import ModalDetailTask from "@/app/components/boards/modal/ModalDetailTask";
+import { useLanguage } from "@/app/contexts/LanguageContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { decodeSingleHashid } from "@/app/utils/hashids";
 import {
@@ -71,6 +72,7 @@ type ProjectMember = {
 };
 
 export default function KanbanBoard() {
+    const { t } = useLanguage()
     const [boards, setBoards] = useState<Board[]>([])
     const [openModalIsDefault, setOpenModalIsDefault] = useState(false)
     const [selectedTask, setSelectedTask] = useState<Task | null>(null)
@@ -155,7 +157,7 @@ export default function KanbanBoard() {
         title: task.title ?? task.name ?? "",
         priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
         description: task.description ?? task.details ?? "",
-        assignedTo: task.assigned_to ?? task.assignedTo ?? task.assignee ?? undefined,
+        assignedTo: task.user_account.full_name ?? undefined,
         progressPercent: task.progress_percent != null ? String(task.progress_percent) : task.progressPercent ?? undefined,
         createdAt: task.created_at ?? task.createdAt ?? undefined,
         updatedAt: task.updated_at ?? task.updatedAt ?? undefined,
@@ -167,6 +169,7 @@ export default function KanbanBoard() {
     });
 
     const handleOpenTaskModal = (task: Task) => {
+
         setSelectedTask(task);
         setIsTaskModalOpen(true);
     };
@@ -412,7 +415,7 @@ export default function KanbanBoard() {
                                                             {board.title}
                                                         </h2>
                                                         <span className="text-xs text-slate-400">
-                                                            {tasks.length} งาน
+                                                            {tasks.length} {t('project.tasks')}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -438,7 +441,7 @@ export default function KanbanBoard() {
                                             >
                                                 {tasks.length === 0 && (
                                                     <div className="flex h-[130px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
-                                                        วางการ์ดที่นี่
+                                                        {t('project.drop_card_here')}
                                                     </div>
                                                 )}
 
@@ -479,7 +482,7 @@ export default function KanbanBoard() {
                                                                     {hasProgress && (
                                                                         <div className="space-y-1.5">
                                                                             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                                                                                <span>Progress</span>
+                                                                                <span>{t('project.progress')}</span>
                                                                                 <span className="text-slate-500">{progressValue}%</span>
                                                                             </div>
                                                                             <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -509,14 +512,14 @@ export default function KanbanBoard() {
                                                                             onClick={() => handleOpenTaskModal(task)}
                                                                         >
                                                                             <span className="h-1 w-1 rounded-full bg-slate-300" />
-                                                                            ดูรายละเอียด
+                                                                            {t('project.view_details')}
                                                                             <FiChevronRight size={12} />
                                                                         </button>
                                                                     </div>
                                                                     <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
                                                                         <span className="inline-flex items-center gap-2">
                                                                             <span className="h-1 w-1 rounded-full bg-primary-200" />
-                                                                            Drag เพื่อเปลี่ยนสถานะ
+                                                                            {t('project.drag_to_change_status')}
                                                                         </span>
                                                                         <FiChevronRight className="text-slate-300" size={13} />
                                                                     </div>

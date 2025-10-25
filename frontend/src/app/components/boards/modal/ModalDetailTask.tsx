@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { FiCalendar, FiFlag, FiHash, FiUser, FiList, FiPlus, FiClock, FiEdit2 } from "react-icons/fi";
-import { apiPrivate } from "@/app/services/apiPrivate";
-import MinimalModal from "../../MinimalModal";
 import { useUser } from "@/app/contexts/UserContext";
+import { apiPrivate } from "@/app/services/apiPrivate";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiPlus, FiUser } from "react-icons/fi";
+import MinimalModal from "../../MinimalModal";
 
 type AssigneeOption = {
     userId: string;
@@ -109,11 +109,11 @@ const ModalDetailTask = ({
     const [formError, setFormError] = useState<string | null>(null);
     const [formValues, setFormValues] = useState<SubtaskFormValues>(createEmptyFormValues);
     const { user } = useUser();
-   const currentUserId = user?.id != null ? String(user.id) : undefined;
-   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
-   const [editProgressPercent, setEditProgressPercent] = useState<string>("0");
-   const [isUpdatingSubtask, setIsUpdatingSubtask] = useState(false);
-   const [updateError, setUpdateError] = useState<string | null>(null);
+    const currentUserId = user?.id != null ? String(user.id) : undefined;
+    const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+    const [editProgressPercent, setEditProgressPercent] = useState<string>("0");
+    const [isUpdatingSubtask, setIsUpdatingSubtask] = useState(false);
+    const [updateError, setUpdateError] = useState<string | null>(null);
     const lastEmittedProgressRef = useRef<number | null>(null);
 
     const buildDefaultFormValues = useMemo(() => {
@@ -598,11 +598,10 @@ const ModalDetailTask = ({
                                                     return (
                                                         <label
                                                             key={assignee.userId}
-                                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                                                                isChecked
+                                                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition ${isChecked
                                                                     ? "border-primary-300 bg-primary-50 text-primary-600"
                                                                     : "border-slate-200 bg-slate-50 text-slate-500"
-                                                            }`}
+                                                                }`}
                                                         >
                                                             <input
                                                                 type="checkbox"
