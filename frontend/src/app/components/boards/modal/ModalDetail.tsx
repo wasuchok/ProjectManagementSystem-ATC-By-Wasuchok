@@ -28,7 +28,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             const response = await apiPrivate.get(`/project/task-status/get-all-status-by-project/${project.id}`)
 
             if (response.status == 200) {
-                console.log(response.data.data)
+
                 setTaskList(response.data.data);
             }
         } catch (error) {

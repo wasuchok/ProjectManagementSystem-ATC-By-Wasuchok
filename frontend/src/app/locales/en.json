@@ -93,7 +93,8 @@
         "update_progress": "Update Progress",
         "adjust_percentage": "Adjust Percentage",
         "saving": "Saving...",
-        "save_changes": "Save Changes"
+        "save_changes": "Save Changes",
+        "projects_overview_subtitle": "Keep track of your ongoing projects and manage invitations from teammates in one focused view."
     },
     "table": {
         "showing_page": "Showing page",

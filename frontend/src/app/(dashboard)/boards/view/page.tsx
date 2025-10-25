@@ -255,7 +255,7 @@ const Page = () => {
                             📁 {t("project.title")}
                         </h1>
                         <p className="max-w-xl text-sm text-slate-500">
-                            Keep track of your ongoing projects and manage invitations from teammates in one focused view.
+                            {t('project.projects_overview_subtitle')}
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">

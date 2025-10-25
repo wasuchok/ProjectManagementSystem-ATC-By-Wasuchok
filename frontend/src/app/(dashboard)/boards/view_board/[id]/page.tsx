@@ -180,7 +180,7 @@ export default function KanbanBoard() {
             title: task.title ?? task.name ?? "",
             priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
             description: task.description ?? task.details ?? "",
-            assignedTo: task.assigned_to ?? task.user_account?.full_name ?? task.assignedTo ?? task.assignee ?? undefined,
+            assignedTo: task.user_account?.full_name ?? undefined,
             progressPercent: task.progress_percent != null ? String(task.progress_percent) : task.progressPercent ?? undefined,
             createdAt: task.created_at ?? task.createdAt ?? undefined,
             updatedAt: task.updated_at ?? task.updatedAt ?? undefined,
