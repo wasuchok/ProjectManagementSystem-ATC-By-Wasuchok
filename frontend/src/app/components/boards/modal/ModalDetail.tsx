@@ -378,17 +378,22 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                         className="absolute top-1/2 left-1/4 transform -translate-x-1/3 -translate-y-1/2"
                     />
                 </div>
+
                 <div className="relative z-10 text-center text-gray-800">
                     <h2 className="text-xl font-semibold mb-1">{t('project.detail_project_title')}</h2>
                     <p className="text-gray-600 text-sm mb-3">{t('project.detail_project_desc')}</p>
-                    <Link
-                        href={`/boards/view_board/${encodeSingleHashid(project.id)}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-green-300 via-emerald-400 to-teal-300 hover:from-green-400 hover:via-emerald-500 hover:to-teal-400 text-white rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
-                    >
-                        <FiPlay size={14} />
-                        {t('project.start_planning')}
-                    </Link>
+                    {taskList && taskList.length > 0 && (
+                        <Link
+                            href={`/boards/view_board/${encodeSingleHashid(project.id)}`}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-green-300 via-emerald-400 to-teal-300 hover:from-green-400 hover:via-emerald-500 hover:to-teal-400 text-white rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
+                        >
+                            <FiPlay size={14} />
+                            {t('project.start_planning')}
+                        </Link>
+                    )}
                 </div>
+
+
             </div>
 
             <div className="space-y-5">

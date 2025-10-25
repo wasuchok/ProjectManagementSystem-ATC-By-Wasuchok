@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiResponse } from 'src/common/dto/api-response.dto';
@@ -15,6 +16,7 @@ import { Roles } from 'src/common/role/roles.decorator';
 import { RolesGuard } from 'src/common/role/roles.guard';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { ProjectService } from './project.service';
+import type { Request } from 'express';
 
 @Controller('project')
 @UseGuards(RolesGuard)
@@ -112,5 +114,52 @@ export class ProjectController {
   @Roles('admin', 'staff', 'employee')
   async getTaskProject(@Param('project_id') project_id: string) {
     return this.projectService.getTaskProject(Number(project_id));
+  }
+
+  @Get('/task/:task_id/subtasks')
+  @Roles('admin', 'staff', 'employee')
+  async getSubtasks(@Param('task_id') task_id: string) {
+    return this.projectService.getSubtasksByTaskId(Number(task_id));
+  }
+
+  @Post('/task/:task_id/subtasks')
+  @Roles('admin', 'staff', 'employee')
+  async createSubtask(
+    @Param('task_id') task_id: string,
+    @Body() body: any,
+  ) {
+    return this.projectService.createSubtask(Number(task_id), body);
+  }
+
+  @Get('/members/:project_id')
+  @Roles('admin', 'staff', 'employee')
+  async getProjectMembers(@Param('project_id') project_id: string) {
+    return this.projectService.getProjectMembersForSubtasks(
+      Number(project_id),
+    );
+  }
+
+  @Patch('/task/:task_id/subtasks/:subtask_id')
+  @Roles('admin', 'staff', 'employee')
+  async updateSubtask(
+    @Param('task_id') task_id: string,
+    @Param('subtask_id') subtask_id: string,
+    @Body() body: any,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : '';
+
+    return this.projectService.updateSubtask(
+      Number(task_id),
+      Number(subtask_id),
+      userId,
+      body,
+    );
   }
 }

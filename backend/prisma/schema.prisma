@@ -9,26 +9,27 @@ datasource db {
 }
 
 model user_account {
-  user_id             String                @id @default(dbgenerated("(uuid())")) @db.Char(36)
-  username            String?               @db.VarChar(50)
-  password_hash       String?               @db.VarChar(255)
-  full_name           String?               @db.VarChar(255)
-  email               String?               @db.VarChar(255)
-  department          String                @db.VarChar(50)
-  position            String                @db.VarChar(50)
-  image               String?               @db.VarChar(255)
-  v_admin             Int?                  @default(0)
-  v_create            Int?                  @default(0)
-  status              Int?                  @default(0)
-  create_date         DateTime?             @default(now()) @db.DateTime(0)
-  create_by           String?               @db.Char(36)
-  refresh_token       String?               @db.VarChar(255)
-  sect                String?               @db.VarChar(10)
-  tb_project_members  tb_project_members[]
-  tb_project_projects tb_project_projects[]
-  tb_project_tasks    tb_project_tasks[]
-  user_account        user_account?         @relation("user_accountTouser_account", fields: [create_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_create_by")
-  other_user_account  user_account[]        @relation("user_accountTouser_account")
+  user_id                       String                          @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  username                      String?                         @db.VarChar(50)
+  password_hash                 String?                         @db.VarChar(255)
+  full_name                     String?                         @db.VarChar(255)
+  email                         String?                         @db.VarChar(255)
+  department                    String                          @db.VarChar(50)
+  position                      String                          @db.VarChar(50)
+  image                         String?                         @db.VarChar(255)
+  v_admin                       Int?                            @default(0)
+  v_create                      Int?                            @default(0)
+  status                        Int?                            @default(0)
+  create_date                   DateTime?                       @default(now()) @db.DateTime(0)
+  create_by                     String?                         @db.Char(36)
+  refresh_token                 String?                         @db.VarChar(255)
+  sect                          String?                         @db.VarChar(10)
+  tb_project_members            tb_project_members[]
+  tb_project_projects           tb_project_projects[]
+  tb_project_sub_task_assignees tb_project_sub_task_assignees[]
+  tb_project_tasks              tb_project_tasks[]
+  user_account                  user_account?                   @relation("user_accountTouser_account", fields: [create_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_create_by")
+  other_user_account            user_account[]                  @relation("user_accountTouser_account")
 
   @@index([create_by], map: "fk_create_by")
 }
@@ -71,17 +72,18 @@ model tb_project_projects {
 }
 
 model tb_project_task_statuses {
-  id                  Int                 @id @default(autoincrement())
-  project_id          Int
-  name                String              @db.VarChar(255)
-  color               String?             @db.VarChar(10)
-  order_index         Int?                @default(0)
-  is_default          Boolean?            @default(false)
-  is_done             Boolean?            @default(false)
-  created_at          DateTime?           @default(now()) @db.DateTime(0)
-  updated_at          DateTime?           @default(now()) @db.DateTime(0)
-  tb_project_projects tb_project_projects @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_project_id")
-  tb_project_tasks    tb_project_tasks[]
+  id                   Int                    @id @default(autoincrement())
+  project_id           Int
+  name                 String                 @db.VarChar(255)
+  color                String?                @db.VarChar(10)
+  order_index          Int?                   @default(0)
+  is_default           Boolean?               @default(false)
+  is_done              Boolean?               @default(false)
+  created_at           DateTime?              @default(now()) @db.DateTime(0)
+  updated_at           DateTime?              @default(now()) @db.DateTime(0)
+  tb_project_sub_tasks tb_project_sub_tasks[]
+  tb_project_projects  tb_project_projects    @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_project_id")
+  tb_project_tasks     tb_project_tasks[]
 
   @@index([project_id], map: "fk_task_project_id")
 }
@@ -97,6 +99,7 @@ model tb_project_tasks {
   progress_percent         Decimal?                  @default(0.00) @db.Decimal(5, 2)
   created_at               DateTime                  @default(now()) @db.DateTime(0)
   updated_at               DateTime                  @default(now()) @db.DateTime(0)
+  tb_project_sub_tasks     tb_project_sub_tasks[]
   user_account             user_account              @relation(fields: [assigned_to], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_assignedto")
   tb_project_projects      tb_project_projects       @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_project_id")
   tb_project_task_statuses tb_project_task_statuses  @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_status_id")
@@ -104,6 +107,39 @@ model tb_project_tasks {
   @@index([assigned_to], map: "fk_tasks_assignedto")
   @@index([project_id], map: "fk_tasks_project_id")
   @@index([status_id], map: "fk_tasks_status_id")
+}
+
+model tb_project_sub_tasks {
+  id                            Int                             @id @default(autoincrement())
+  task_id                       Int
+  title                         String                          @db.VarChar(255)
+  description                   String                          @db.Text
+  status_id                     Int
+  progress_percent              Decimal                         @db.Decimal(5, 2)
+  start_date                    DateTime                        @db.DateTime(0)
+  has_due_date                  Boolean?
+  due_date                      DateTime?                       @db.DateTime(0)
+  completed_date                DateTime?                       @db.DateTime(0)
+  created_at                    DateTime                        @default(now()) @db.DateTime(0)
+  updated_at                    DateTime                        @default(now()) @db.DateTime(0)
+  tb_project_sub_task_assignees tb_project_sub_task_assignees[]
+  tb_project_task_statuses      tb_project_task_statuses        @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sub_task_status_id")
+  tb_project_tasks              tb_project_tasks                @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sub_task_task_id")
+
+  @@index([status_id], map: "fk_sub_task_status_id")
+  @@index([task_id], map: "fk_sub_task_task_id")
+}
+
+model tb_project_sub_task_assignees {
+  id                   Int                  @id @default(autoincrement())
+  subtask_id           Int
+  user_id              String               @db.VarChar(255)
+  assigned_at          DateTime             @default(now()) @db.DateTime(0)
+  tb_project_sub_tasks tb_project_sub_tasks @relation(fields: [subtask_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_project_sub_task_sub_task_id")
+  user_account         user_account         @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_project_user_id")
+
+  @@index([subtask_id], map: "fk_project_sub_task_sub_task_id")
+  @@index([user_id], map: "fk_project_user_id")
 }
 
 enum tb_project_members_status {

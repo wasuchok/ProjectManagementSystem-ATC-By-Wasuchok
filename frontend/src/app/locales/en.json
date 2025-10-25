@@ -69,7 +69,8 @@
         "edit": "Edit",
         "create_new_task_title": "Create a New Task",
         "create_new_task_description": "Define the details of the task you want to create in this project, including its priority and additional information to help the team stay aligned.",
-        "create_new_task_note": "You can edit or add more details later in the task card’s detail view."
+        "create_new_task_note": "You can edit or add more details later in the task card’s detail view.",
+        "start_planning": "Start Planning"
     },
     "table": {
         "showing_page": "Showing page",

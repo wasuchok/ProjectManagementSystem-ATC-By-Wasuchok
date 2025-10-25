@@ -3,7 +3,7 @@ import { ApiResponse } from 'src/common/dto/api-response.dto';
 import { EventsGateway } from 'src/event/events.gateway';
 import { PrismaService } from 'src/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { tb_project_members_status } from 'generated/prisma';
+import { Prisma, tb_project_members_status } from 'generated/prisma';
 
 @Injectable()
 export class ProjectService {
@@ -363,6 +363,20 @@ export class ProjectService {
   }
 
   async getTaskProject(project_id: number) {
+    const subtaskInclude: Prisma.tb_project_tasks$tb_project_sub_tasksArgs = {
+      orderBy: {
+        created_at: 'asc',
+      },
+      include: {
+        tb_project_task_statuses: true,
+        tb_project_sub_task_assignees: {
+          include: {
+            user_account: true,
+          },
+        },
+      },
+    };
+
     const lists = await this.prisma.tb_project_tasks.findMany({
       where: {
         project_id: project_id,
@@ -372,9 +386,239 @@ export class ProjectService {
       },
       include: {
         user_account: true,
+        tb_project_sub_tasks: subtaskInclude,
       },
     });
 
     return new ApiResponse('เรียกดูข้อมูลหัวข้องานสำเร็จ', 200, lists);
+  }
+
+  async getProjectMembersForSubtasks(project_id: number) {
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+    });
+
+    if (!project) {
+      return new ApiResponse('ไม่พบโปรเจกต์ที่ต้องการ', 404, null);
+    }
+
+    const members = await this.prisma.tb_project_members.findMany({
+      where: {
+        project_id,
+        status: tb_project_members_status.joined,
+      },
+      include: {
+        user_account: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+    });
+
+    return new ApiResponse('เรียกดูสมาชิกโปรเจกต์สำเร็จ', 200, members);
+  }
+
+  async getSubtasksByTaskId(task_id: number) {
+    const task = await this.prisma.tb_project_tasks.findUnique({
+      where: { id: task_id },
+    });
+
+    if (!task) {
+      return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
+    const subtasks = await this.prisma.tb_project_sub_tasks.findMany({
+      where: { task_id },
+      orderBy: {
+        created_at: 'asc',
+      },
+      include: {
+        tb_project_task_statuses: true,
+        tb_project_sub_task_assignees: {
+          include: {
+            user_account: true,
+          },
+        },
+      },
+    });
+
+    return new ApiResponse('เรียกดูงานย่อยสำเร็จ', 200, subtasks);
+  }
+
+  private async recalculateTaskProgress(task_id: number) {
+    const aggregate = await this.prisma.tb_project_sub_tasks.aggregate({
+      where: { task_id },
+      _avg: {
+        progress_percent: true,
+      },
+    });
+
+    const avgProgress = aggregate._avg.progress_percent
+      ? Number(aggregate._avg.progress_percent)
+      : 0;
+
+    await this.prisma.tb_project_tasks.update({
+      where: { id: task_id },
+      data: {
+        progress_percent: avgProgress,
+        updated_at: new Date(),
+      },
+    });
+  }
+
+  async createSubtask(task_id: number, data: any) {
+    const task = await this.prisma.tb_project_tasks.findUnique({
+      where: { id: task_id },
+    });
+
+    if (!task) {
+      return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
+    if (!data?.title || typeof data.title !== 'string') {
+      return new ApiResponse('กรุณาระบุชื่องานย่อย', 400, null);
+    }
+
+    const statusId =
+      data.status_id != null ? Number(data.status_id) : task.status_id;
+
+    const progressPercent =
+      data.progress_percent != null ? Number(data.progress_percent) : 0;
+
+    const hasDueDate =
+      data.has_due_date === true ||
+      data.has_due_date === 'true' ||
+      data.has_due_date === 1;
+
+    const createPayload: Prisma.tb_project_sub_tasksUncheckedCreateInput = {
+      task_id,
+      title: data.title.trim(),
+      description: data.description?.trim() ?? '',
+      status_id: statusId,
+      progress_percent: progressPercent,
+      start_date: data.start_date ? new Date(data.start_date) : new Date(),
+      has_due_date: hasDueDate,
+    };
+
+    if (hasDueDate && data.due_date) {
+      createPayload.due_date = new Date(data.due_date);
+    }
+
+    if (data.completed_date) {
+      createPayload.completed_date = new Date(data.completed_date);
+    }
+
+    const created = await this.prisma.tb_project_sub_tasks.create({
+      data: createPayload,
+    });
+
+    const assigneeIds: string[] = Array.isArray(data.assignee_user_ids)
+      ? data.assignee_user_ids
+          .map((value: any) => String(value).trim())
+          .filter((value: string) => value.length > 0)
+      : typeof data.assignee_user_id === 'string'
+        ? [data.assignee_user_id.trim()]
+        : [];
+
+    if (assigneeIds.length > 0) {
+      await this.prisma.tb_project_sub_task_assignees.createMany({
+        data: assigneeIds.map((userId) => ({
+          subtask_id: created.id,
+          user_id: userId,
+          assigned_at: new Date(),
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const subtaskWithRelations =
+      await this.prisma.tb_project_sub_tasks.findUnique({
+        where: { id: created.id },
+        include: {
+          tb_project_task_statuses: true,
+          tb_project_sub_task_assignees: {
+            include: {
+              user_account: true,
+            },
+          },
+        },
+      });
+
+    await this.recalculateTaskProgress(task_id);
+
+    return new ApiResponse(
+      'สร้างงานย่อยสำเร็จ',
+      201,
+      subtaskWithRelations,
+    );
+  }
+
+  async updateSubtask(
+    task_id: number,
+    subtask_id: number,
+    userId: string,
+    data: any,
+  ) {
+    if (!userId) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 401, null);
+    }
+
+    const subtask = await this.prisma.tb_project_sub_tasks.findFirst({
+      where: {
+        id: subtask_id,
+        task_id,
+      },
+      include: {
+        tb_project_sub_task_assignees: true,
+      },
+    });
+
+    if (!subtask) {
+      return new ApiResponse('ไม่พบงานย่อยที่ต้องการ', 404, null);
+    }
+
+    const isAssignee = subtask.tb_project_sub_task_assignees.some(
+      (assignee) => assignee.user_id === userId,
+    );
+
+    if (!isAssignee) {
+      return new ApiResponse('คุณไม่มีสิทธิ์อัปเดตงานย่อยนี้', 403, null);
+    }
+
+    const updateData: Prisma.tb_project_sub_tasksUncheckedUpdateInput = {
+      updated_at: new Date(),
+    };
+
+    if (data.progress_percent != null) {
+      const progressNumber = Number(data.progress_percent);
+      if (!Number.isNaN(progressNumber)) {
+        updateData.progress_percent = Math.min(
+          100,
+          Math.max(0, progressNumber),
+        );
+      }
+    }
+
+    await this.prisma.tb_project_sub_tasks.update({
+      where: { id: subtask.id },
+      data: updateData,
+    });
+
+    const subtaskWithRelations =
+      await this.prisma.tb_project_sub_tasks.findUnique({
+        where: { id: subtask.id },
+        include: {
+          tb_project_task_statuses: true,
+          tb_project_sub_task_assignees: {
+            include: {
+              user_account: true,
+            },
+          },
+        },
+      });
+
+    await this.recalculateTaskProgress(task_id);
+
+    return new ApiResponse('อัปเดตงานย่อยสำเร็จ', 200, subtaskWithRelations);
   }
 }

@@ -17,6 +17,29 @@ import {
 } from "react-icons/fa";
 import { FiChevronRight } from "react-icons/fi";
 
+type SubtaskAssignee = {
+    id: string;
+    userId: string;
+    fullName?: string;
+    assignedAt?: string;
+};
+
+type Subtask = {
+    id: string;
+    title: string;
+    description?: string;
+    statusId?: string;
+    statusLabel?: string;
+    progressPercent?: string;
+    startDate?: string;
+    hasDueDate?: boolean;
+    dueDate?: string;
+    completedDate?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    assignees?: SubtaskAssignee[];
+};
+
 type Task = {
     id: string;
     title: string;
@@ -26,6 +49,9 @@ type Task = {
     progressPercent?: string;
     createdAt?: string;
     updatedAt?: string;
+    statusId?: string;
+    statusLabel?: string;
+    subtasks?: Subtask[];
 };
 
 type Board = {
@@ -37,11 +63,44 @@ type Board = {
     color?: string;
 };
 
+type ProjectMember = {
+    userId: string;
+    fullName?: string;
+    department?: string;
+    avatarUrl?: string;
+};
+
 export default function KanbanBoard() {
     const [boards, setBoards] = useState<Board[]>([])
     const [openModalIsDefault, setOpenModalIsDefault] = useState(false)
     const [selectedTask, setSelectedTask] = useState<Task | null>(null)
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
+    const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
+    const handleTaskProgressChanged = (taskId: string, progressPercent: number) => {
+        const clampedProgress = Math.min(100, Math.max(0, progressPercent));
+        setBoards((prevBoards) =>
+            prevBoards.map((board) => ({
+                ...board,
+                tasks: board.tasks.map((task) =>
+                    task.id === taskId
+                        ? {
+                            ...task,
+                            progressPercent: String(clampedProgress),
+                        }
+                        : task
+                ),
+            }))
+        );
+
+        setSelectedTask((prev) =>
+            prev && prev.id === taskId
+                ? {
+                    ...prev,
+                    progressPercent: String(clampedProgress),
+                }
+                : prev
+        );
+    };
 
     const { id } = useParams()
 
@@ -68,6 +127,29 @@ export default function KanbanBoard() {
         },
     };
 
+    const normalizeSubtaskData = (subtask: any): Subtask => ({
+        id: String(subtask.id),
+        title: subtask.title ?? "",
+        description: subtask.description ?? "",
+        statusId: subtask.status_id != null ? String(subtask.status_id) : subtask.statusId ?? undefined,
+        statusLabel: subtask.tb_project_task_statuses?.name ?? subtask.statusLabel ?? undefined,
+        progressPercent: subtask.progress_percent != null ? String(subtask.progress_percent) : subtask.progressPercent ?? undefined,
+        startDate: subtask.start_date ?? subtask.startDate ?? undefined,
+        hasDueDate: subtask.has_due_date ?? subtask.hasDueDate ?? false,
+        dueDate: subtask.due_date ?? subtask.dueDate ?? undefined,
+        completedDate: subtask.completed_date ?? subtask.completedDate ?? undefined,
+        createdAt: subtask.created_at ?? subtask.createdAt ?? undefined,
+        updatedAt: subtask.updated_at ?? subtask.updatedAt ?? undefined,
+        assignees: Array.isArray(subtask.tb_project_sub_task_assignees ?? subtask.assignees)
+            ? (subtask.tb_project_sub_task_assignees ?? subtask.assignees).map((assignee: any) => ({
+                id: String(assignee.id ?? `${subtask.id}-${assignee.user_id ?? assignee.userId ?? ""}`),
+                userId: assignee.user_id ?? assignee.userId ?? "",
+                fullName: assignee.user_account?.full_name ?? assignee.fullName ?? assignee.user_account?.username ?? undefined,
+                assignedAt: assignee.assigned_at ?? assignee.assignedAt ?? undefined,
+            }))
+            : [],
+    });
+
     const normalizeTaskData = (task: any): Task => ({
         id: String(task.id),
         title: task.title ?? task.name ?? "",
@@ -77,6 +159,11 @@ export default function KanbanBoard() {
         progressPercent: task.progress_percent != null ? String(task.progress_percent) : task.progressPercent ?? undefined,
         createdAt: task.created_at ?? task.createdAt ?? undefined,
         updatedAt: task.updated_at ?? task.updatedAt ?? undefined,
+        statusId: task.status_id != null ? String(task.status_id) : task.statusId ?? undefined,
+        statusLabel: task.tb_project_task_statuses?.name ?? task.statusLabel ?? undefined,
+        subtasks: Array.isArray(task.tb_project_sub_tasks ?? task.subtasks)
+            ? (task.tb_project_sub_tasks ?? task.subtasks).map((sub: any) => normalizeSubtaskData(sub))
+            : [],
     });
 
     const handleOpenTaskModal = (task: Task) => {
@@ -87,6 +174,32 @@ export default function KanbanBoard() {
     const handleCloseTaskModal = () => {
         setSelectedTask(null);
         setIsTaskModalOpen(false);
+    };
+
+    const fetchProjectMembers = async () => {
+        if (!id) return;
+        try {
+            const decodedId = decodeSingleHashid(String(id));
+            if (!decodedId) {
+                setProjectMembers([]);
+                return;
+            }
+            const response = await apiPrivate.get(`/project/members/${decodedId}`);
+            if (response.status === 200) {
+                const members = Array.isArray(response.data?.data)
+                    ? response.data.data.map((member: any) => ({
+                        userId: member.user_id ?? "",
+                        fullName: member.user_account?.full_name ?? undefined,
+                        department: member.user_account?.department ?? undefined,
+                        avatarUrl: member.user_account?.image ?? undefined,
+                    })).filter((member: ProjectMember) => member.userId)
+                    : [];
+                setProjectMembers(members);
+            }
+        } catch (error) {
+            console.log(error);
+            setProjectMembers([]);
+        }
     };
 
     const formatDateTime = (value?: string) => {
@@ -184,6 +297,7 @@ export default function KanbanBoard() {
 
     useEffect(() => {
         fetchAllStatusTask()
+        fetchProjectMembers()
 
     }, [id])
 
@@ -423,11 +537,11 @@ export default function KanbanBoard() {
                 </DragDropContext>
 
                 {selectedTask && (
-                    <ModalDetailTask isTaskModalOpen={isTaskModalOpen} handleCloseTaskModal={handleCloseTaskModal} selectedTask={selectedTask} priorityConfig={priorityConfig} getProgressValue={getProgressValue} getProgressAppearance={getProgressAppearance} formatDateTime={formatDateTime} />
+                    <ModalDetailTask isTaskModalOpen={isTaskModalOpen} handleCloseTaskModal={handleCloseTaskModal} selectedTask={selectedTask} priorityConfig={priorityConfig} getProgressValue={getProgressValue} getProgressAppearance={getProgressAppearance} formatDateTime={formatDateTime} availableAssignees={projectMembers} onTaskProgressChanged={handleTaskProgressChanged} />
                 )}
 
                 {openModalIsDefault && (
-                    <ModalAddTask open={openModalIsDefault} setOpen={setOpenModalIsDefault} project_id={decodeSingleHashid(String(id))} boards={boards} />
+                    <ModalAddTask fetchTaskProject={fetchTaskProject} open={openModalIsDefault} setOpen={setOpenModalIsDefault} project_id={decodeSingleHashid(String(id))} boards={boards} />
                 )}
             </div>
         </>

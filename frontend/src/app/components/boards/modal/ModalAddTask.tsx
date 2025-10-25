@@ -5,12 +5,13 @@ import { useLanguage } from "@/app/contexts/LanguageContext"
 import { useUser } from "@/app/contexts/UserContext"
 import { apiPrivate } from "@/app/services/apiPrivate"
 import { Controller, useForm } from "react-hook-form"
+import { CustomAlert } from "../../CustomAlertModal"
 import OptionList from "../../Input/OptionList"
 import TextArea from "../../Input/TextArea"
 import TextField from "../../Input/TextField"
 import MinimalModal from "../../MinimalModal"
 
-const ModalAddTask = ({ open, setOpen, project_id, boards }: any) => {
+const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: any) => {
     const { user }: any = useUser()
     const { t } = useLanguage();
     const {
@@ -30,20 +31,37 @@ const ModalAddTask = ({ open, setOpen, project_id, boards }: any) => {
         try {
 
             const findIsDefault = boards.find((item: any) => item.isDefault == true)
-            const sendData = {
-                "project_id": project_id,
-                "title": data.title,
-                "description": data.description,
-                "status_id": Number(findIsDefault.id),
-                "assigned_to": user.id,
-                "priority": data.priority
+            const confirm = await CustomAlert({
+                type: "confirm",
+                title: t("modal.are_you_sure"),
+                message: t("modal.do_you_want_to_save_information"),
+            });
+
+            if (confirm) {
+                const sendData = {
+                    "project_id": project_id,
+                    "title": data.title,
+                    "description": data.description,
+                    "status_id": Number(findIsDefault.id),
+                    "assigned_to": user.id,
+                    "priority": data.priority
+                }
+
+                const response = await apiPrivate.post("/project/task/add", sendData)
+
+                if (response.status == 200 || response.status == 201) {
+                    await CustomAlert({
+                        type: "success",
+                        title: t('alert.success'),
+                        message: t('alert.alert_success')
+                    })
+                    reset()
+                    fetchTaskProject()
+                    setOpen(false)
+                }
             }
 
-            const response = await apiPrivate.post("/project/task/add", sendData)
 
-            console.log(response.data)
-            reset()
-            setOpen(false)
 
         } catch (error) {
             console.log(error)
