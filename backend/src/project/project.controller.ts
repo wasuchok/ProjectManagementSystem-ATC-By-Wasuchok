@@ -162,4 +162,13 @@ export class ProjectController {
       body,
     );
   }
+
+  @Patch('/task/:task_id/move')
+  @Roles('admin', 'staff', 'employee')
+  async moveTask(
+    @Param('task_id') task_id: string,
+    @Body() body: { status_id: number },
+  ) {
+    return this.projectService.moveTask(Number(task_id), Number(body.status_id));
+  }
 }

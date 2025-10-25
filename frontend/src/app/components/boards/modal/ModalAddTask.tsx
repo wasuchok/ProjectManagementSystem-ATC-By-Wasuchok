@@ -28,6 +28,10 @@ const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: a
     });
 
     const onSubmit = async (data: any) => {
+        if (!project_id) {
+            console.error("Missing project id");
+            return;
+        }
         try {
 
             const findIsDefault = boards.find((item: any) => item.isDefault == true)

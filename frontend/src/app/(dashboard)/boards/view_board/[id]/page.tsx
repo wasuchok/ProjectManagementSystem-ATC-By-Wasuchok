@@ -5,6 +5,7 @@ import ModalDetailTask from "@/app/components/boards/modal/ModalDetailTask";
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { decodeSingleHashid } from "@/app/utils/hashids";
+import { getSocket } from "@/app/utils/socket";
 import {
     DragDropContext,
     Draggable,
@@ -12,11 +13,12 @@ import {
     DropResult,
 } from "@hello-pangea/dnd";
 import { useParams } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     FaPlus
 } from "react-icons/fa";
 import { FiChevronRight } from "react-icons/fi";
+import type { Socket } from "socket.io-client";
 
 type SubtaskAssignee = {
     id: string;
@@ -71,14 +73,30 @@ type ProjectMember = {
     avatarUrl?: string;
 };
 
+type TaskMovedEvent = {
+    projectId: number;
+    previousStatusId?: number | null;
+    newStatusId: number;
+    task: any;
+};
+
 export default function KanbanBoard() {
-    const { t } = useLanguage()
-    const [boards, setBoards] = useState<Board[]>([])
-    const [openModalIsDefault, setOpenModalIsDefault] = useState(false)
-    const [selectedTask, setSelectedTask] = useState<Task | null>(null)
-    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
-    const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
-    const handleTaskProgressChanged = (taskId: string, progressPercent: number) => {
+    const { t } = useLanguage();
+    const { id } = useParams();
+    const [boards, setBoards] = useState<Board[]>([]);
+    const [openModalIsDefault, setOpenModalIsDefault] = useState(false);
+    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+    const socketRef = useRef<Socket | null>(null);
+
+    const projectId = useMemo(() => {
+        if (!id) return null;
+        const decoded = decodeSingleHashid(String(id));
+        return decoded ?? null;
+    }, [id]);
+
+    const handleTaskProgressChanged = useCallback((taskId: string, progressPercent: number) => {
         const clampedProgress = Math.min(100, Math.max(0, progressPercent));
         setBoards((prevBoards) =>
             prevBoards.map((board) => ({
@@ -102,9 +120,7 @@ export default function KanbanBoard() {
                 }
                 : prev
         );
-    };
-
-    const { id } = useParams()
+    }, []);
 
     const priorityConfig: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
         low: {
@@ -129,44 +145,91 @@ export default function KanbanBoard() {
         },
     };
 
-    const normalizeSubtaskData = (subtask: any): Subtask => ({
-        id: String(subtask.id),
-        title: subtask.title ?? "",
-        description: subtask.description ?? "",
-        statusId: subtask.status_id != null ? String(subtask.status_id) : subtask.statusId ?? undefined,
-        statusLabel: subtask.tb_project_task_statuses?.name ?? subtask.statusLabel ?? undefined,
-        progressPercent: subtask.progress_percent != null ? String(subtask.progress_percent) : subtask.progressPercent ?? undefined,
-        startDate: subtask.start_date ?? subtask.startDate ?? undefined,
-        hasDueDate: subtask.has_due_date ?? subtask.hasDueDate ?? false,
-        dueDate: subtask.due_date ?? subtask.dueDate ?? undefined,
-        completedDate: subtask.completed_date ?? subtask.completedDate ?? undefined,
-        createdAt: subtask.created_at ?? subtask.createdAt ?? undefined,
-        updatedAt: subtask.updated_at ?? subtask.updatedAt ?? undefined,
-        assignees: Array.isArray(subtask.tb_project_sub_task_assignees ?? subtask.assignees)
-            ? (subtask.tb_project_sub_task_assignees ?? subtask.assignees).map((assignee: any) => ({
-                id: String(assignee.id ?? `${subtask.id}-${assignee.user_id ?? assignee.userId ?? ""}`),
-                userId: assignee.user_id ?? assignee.userId ?? "",
-                fullName: assignee.user_account?.full_name ?? assignee.fullName ?? assignee.user_account?.username ?? undefined,
-                assignedAt: assignee.assigned_at ?? assignee.assignedAt ?? undefined,
-            }))
-            : [],
-    });
+    const normalizeSubtaskData = useCallback(
+        (subtask: any): Subtask => ({
+            id: String(subtask.id),
+            title: subtask.title ?? "",
+            description: subtask.description ?? "",
+            statusId: subtask.status_id != null ? String(subtask.status_id) : subtask.statusId ?? undefined,
+            statusLabel: subtask.tb_project_task_statuses?.name ?? subtask.statusLabel ?? undefined,
+            progressPercent: subtask.progress_percent != null ? String(subtask.progress_percent) : subtask.progressPercent ?? undefined,
+            startDate: subtask.start_date ?? subtask.startDate ?? undefined,
+            hasDueDate: subtask.has_due_date ?? subtask.hasDueDate ?? false,
+            dueDate: subtask.due_date ?? subtask.dueDate ?? undefined,
+            completedDate: subtask.completed_date ?? subtask.completedDate ?? undefined,
+            createdAt: subtask.created_at ?? subtask.createdAt ?? undefined,
+            updatedAt: subtask.updated_at ?? subtask.updatedAt ?? undefined,
+            assignees: Array.isArray(subtask.tb_project_sub_task_assignees ?? subtask.assignees)
+                ? (subtask.tb_project_sub_task_assignees ?? subtask.assignees).map((assignee: any) => ({
+                    id: String(assignee.id ?? `${subtask.id}-${assignee.user_id ?? assignee.userId ?? ""}`),
+                    userId: assignee.user_id ?? assignee.userId ?? "",
+                    fullName: assignee.user_account?.full_name ?? assignee.fullName ?? assignee.user_account?.username ?? undefined,
+                    assignedAt: assignee.assigned_at ?? assignee.assignedAt ?? undefined,
+                }))
+                : [],
+        }),
+        []
+    );
 
-    const normalizeTaskData = (task: any): Task => ({
-        id: String(task.id),
-        title: task.title ?? task.name ?? "",
-        priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
-        description: task.description ?? task.details ?? "",
-        assignedTo: task.user_account.full_name ?? undefined,
-        progressPercent: task.progress_percent != null ? String(task.progress_percent) : task.progressPercent ?? undefined,
-        createdAt: task.created_at ?? task.createdAt ?? undefined,
-        updatedAt: task.updated_at ?? task.updatedAt ?? undefined,
-        statusId: task.status_id != null ? String(task.status_id) : task.statusId ?? undefined,
-        statusLabel: task.tb_project_task_statuses?.name ?? task.statusLabel ?? undefined,
-        subtasks: Array.isArray(task.tb_project_sub_tasks ?? task.subtasks)
-            ? (task.tb_project_sub_tasks ?? task.subtasks).map((sub: any) => normalizeSubtaskData(sub))
-            : [],
-    });
+
+
+
+    const normalizeTaskData = useCallback(
+        (task: any): Task => ({
+            id: String(task.id),
+            title: task.title ?? task.name ?? "",
+            priority: typeof task.priority === "string" ? task.priority.toLowerCase() : undefined,
+            description: task.description ?? task.details ?? "",
+            assignedTo: task.assigned_to ?? task.user_account?.full_name ?? task.assignedTo ?? task.assignee ?? undefined,
+            progressPercent: task.progress_percent != null ? String(task.progress_percent) : task.progressPercent ?? undefined,
+            createdAt: task.created_at ?? task.createdAt ?? undefined,
+            updatedAt: task.updated_at ?? task.updatedAt ?? undefined,
+            statusId: task.status_id != null ? String(task.status_id) : task.statusId ?? undefined,
+            statusLabel: task.tb_project_task_statuses?.name ?? task.statusLabel ?? undefined,
+            subtasks: Array.isArray(task.tb_project_sub_tasks ?? task.subtasks)
+                ? (task.tb_project_sub_tasks ?? task.subtasks).map((sub: any) => normalizeSubtaskData(sub))
+                : [],
+        }),
+        [normalizeSubtaskData]
+    );
+
+    const updateBoardsWithTask = useCallback((normalizedTask: Task, previousStatusId?: string | null) => {
+        const destinationBoardId = normalizedTask.statusId ? String(normalizedTask.statusId) : null;
+        const previousBoardId = previousStatusId != null ? String(previousStatusId) : null;
+
+        setBoards((prevBoards) =>
+            prevBoards.map((board) => {
+                const filteredTasks = board.tasks.filter((task) => task.id !== normalizedTask.id);
+
+                if (destinationBoardId && board.id === destinationBoardId) {
+                    return {
+                        ...board,
+                        tasks: [normalizedTask, ...filteredTasks],
+                    };
+                }
+
+                if (previousBoardId && previousBoardId !== destinationBoardId && board.id === previousBoardId) {
+                    return {
+                        ...board,
+                        tasks: filteredTasks,
+                    };
+                }
+
+                if (filteredTasks.length !== board.tasks.length) {
+                    return {
+                        ...board,
+                        tasks: filteredTasks,
+                    };
+                }
+
+                return board;
+            })
+        );
+
+        setSelectedTask((prev) =>
+            prev && prev.id === normalizedTask.id ? { ...prev, ...normalizedTask } : prev
+        );
+    }, []);
 
     const handleOpenTaskModal = (task: Task) => {
 
@@ -180,22 +243,23 @@ export default function KanbanBoard() {
     };
 
     const fetchProjectMembers = async () => {
-        if (!id) return;
+        if (!projectId) {
+            setProjectMembers([]);
+            return;
+        }
+
         try {
-            const decodedId = decodeSingleHashid(String(id));
-            if (!decodedId) {
-                setProjectMembers([]);
-                return;
-            }
-            const response = await apiPrivate.get(`/project/members/${decodedId}`);
+            const response = await apiPrivate.get(`/project/members/${projectId}`);
             if (response.status === 200) {
                 const members = Array.isArray(response.data?.data)
-                    ? response.data.data.map((member: any) => ({
-                        userId: member.user_id ?? "",
-                        fullName: member.user_account?.full_name ?? undefined,
-                        department: member.user_account?.department ?? undefined,
-                        avatarUrl: member.user_account?.image ?? undefined,
-                    })).filter((member: ProjectMember) => member.userId)
+                    ? response.data.data
+                        .map((member: any) => ({
+                            userId: member.user_id ?? "",
+                            fullName: member.user_account?.full_name ?? undefined,
+                            department: member.user_account?.department ?? undefined,
+                            avatarUrl: member.user_account?.image ?? undefined,
+                        }))
+                        .filter((member: ProjectMember) => member.userId)
                     : [];
                 setProjectMembers(members);
             }
@@ -249,10 +313,10 @@ export default function KanbanBoard() {
 
     const fetchTaskProject = async (boardsFromStatus?: Board[]) => {
         const baseBoards = boardsFromStatus ?? boards;
-        if (!id || baseBoards.length === 0) return;
+        if (!projectId || baseBoards.length === 0) return;
 
         try {
-            const response = await apiPrivate.get(`/project/task/project/${decodeSingleHashid(String(id))}`)
+            const response = await apiPrivate.get(`/project/task/project/${projectId}`);
             if (response.status == 200) {
                 const tasks = Array.isArray(response.data.data) ? response.data.data : [];
 
@@ -270,15 +334,15 @@ export default function KanbanBoard() {
                 setBoards(boardsWithTasks);
             }
         } catch (error) {
-            console.log(error)
+            console.log(error);
         }
     }
 
     const fetchAllStatusTask = async () => {
-        if (!id) return;
+        if (!projectId) return;
 
         try {
-            const response = await apiPrivate.get(`/project/task-status/get-all-status-by-project/${decodeSingleHashid(String(id))}`)
+            const response = await apiPrivate.get(`/project/task-status/get-all-status-by-project/${projectId}`);
             if (response.status == 200 || response.status == 201) {
                 const statuses = Array.isArray(response.data.data) ? response.data.data : [];
                 const normalizedBoards = statuses.map((status: any) => ({
@@ -289,60 +353,99 @@ export default function KanbanBoard() {
                     color: status.color ? String(status.color) : undefined,
                 }));
 
-                setBoards(normalizedBoards)
-                await fetchTaskProject(normalizedBoards)
+                setBoards(normalizedBoards);
+                await fetchTaskProject(normalizedBoards);
             }
-
         } catch (error) {
-            console.log(error)
+            console.log(error);
         }
     }
 
     useEffect(() => {
-        fetchAllStatusTask()
-        fetchProjectMembers()
+        fetchAllStatusTask();
+        fetchProjectMembers();
+    }, [projectId, normalizeTaskData]);
 
-    }, [id])
+    useEffect(() => {
+        if (!projectId) return;
+        const socket = getSocket();
+        socketRef.current = socket;
+        if (!socket.connected) socket.connect();
+
+        const handleTaskMoved = (payload: TaskMovedEvent) => {
+            if (!payload) return;
+            if (Number(payload.projectId) !== Number(projectId)) return;
+            const normalizedTask = normalizeTaskData(payload.task);
+            const previousStatusId = payload.previousStatusId != null ? String(payload.previousStatusId) : undefined;
+            updateBoardsWithTask(normalizedTask, previousStatusId);
+        };
+
+        socket.emit("joinProject", projectId);
+        socket.on("project:task:moved", handleTaskMoved);
+
+        return () => {
+            socket.emit("leaveProject", projectId);
+            socket.off("project:task:moved", handleTaskMoved);
+        };
+    }, [projectId, normalizeTaskData, updateBoardsWithTask]);
 
 
-    const handleDragEnd = (result: DropResult) => {
+    const handleDragEnd = async (result: DropResult) => {
         const { source, destination } = result;
         if (!destination) return;
 
-
-        if (
-            source.droppableId === destination.droppableId &&
-            source.index === destination.index
-        )
+        if (source.droppableId === destination.droppableId && source.index === destination.index) {
             return;
+        }
 
-        const newBoards = Array.from(boards);
-        const sourceBoard = newBoards.find(
-            (b) => b.id === source.droppableId
-        );
-        const destBoard = newBoards.find(
-            (b) => b.id === destination.droppableId
-        );
+        const cloneBoards = (data: Board[]) =>
+            data.map((board) => ({
+                ...board,
+                tasks: [...board.tasks],
+            }));
+
+        const originalBoards = cloneBoards(boards);
+        const updatedBoards = cloneBoards(boards);
+
+        const sourceBoard = updatedBoards.find((b) => b.id === source.droppableId);
+        const destBoard = updatedBoards.find((b) => b.id === destination.droppableId);
 
         if (!sourceBoard || !destBoard) return;
 
-        const sourceTasks = Array.from(sourceBoard.tasks);
-        const destTasks =
-            sourceBoard === destBoard
-                ? sourceTasks
-                : Array.from(destBoard.tasks);
+        const [movedTask] = sourceBoard.tasks.splice(source.index, 1);
+        if (!movedTask) return;
 
-        const [movedTask] = sourceTasks.splice(source.index, 1);
-        destTasks.splice(destination.index, 0, movedTask);
+        destBoard.tasks.splice(destination.index, 0, movedTask);
 
-        if (sourceBoard === destBoard) {
-            sourceBoard.tasks = destTasks;
-        } else {
-            sourceBoard.tasks = sourceTasks;
-            destBoard.tasks = destTasks;
+        setBoards(updatedBoards);
+
+        if (sourceBoard.id !== destBoard.id) {
+            setSelectedTask((prev) =>
+                prev && prev.id === movedTask.id
+                    ? { ...prev, statusId: destBoard.id, statusLabel: destBoard.title }
+                    : prev
+            );
         }
 
-        setBoards(newBoards);
+        if (sourceBoard.id === destBoard.id) {
+            return;
+        }
+
+        try {
+            await apiPrivate.patch(`/project/task/${movedTask.id}/move`, {
+                status_id: Number(destBoard.id),
+            });
+        } catch (error) {
+            console.error("Failed to move task", error);
+            setBoards(originalBoards);
+            if (sourceBoard.id !== destBoard.id) {
+                setSelectedTask((prev) =>
+                    prev && prev.id === movedTask.id
+                        ? { ...prev, statusId: sourceBoard.id, statusLabel: sourceBoard.title }
+                        : prev
+                );
+            }
+        }
     };
 
     return (
@@ -544,7 +647,7 @@ export default function KanbanBoard() {
                 )}
 
                 {openModalIsDefault && (
-                    <ModalAddTask fetchTaskProject={fetchTaskProject} open={openModalIsDefault} setOpen={setOpenModalIsDefault} project_id={decodeSingleHashid(String(id))} boards={boards} />
+                    <ModalAddTask fetchTaskProject={fetchTaskProject} open={openModalIsDefault} setOpen={setOpenModalIsDefault} project_id={projectId ?? undefined} boards={boards} />
                 )}
             </div>
         </>

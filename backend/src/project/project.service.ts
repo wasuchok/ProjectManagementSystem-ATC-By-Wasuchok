@@ -621,4 +621,58 @@ export class ProjectService {
 
     return new ApiResponse('อัปเดตงานย่อยสำเร็จ', 200, subtaskWithRelations);
   }
+
+  async moveTask(task_id: number, status_id: number) {
+    if (!status_id) {
+      return new ApiResponse('กรุณาระบุสถานะใหม่', 400, null);
+    }
+
+    const existingTask = await this.prisma.tb_project_tasks.findUnique({
+      where: { id: task_id },
+    });
+
+    if (!existingTask) {
+      return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
+    const targetStatus = await this.prisma.tb_project_task_statuses.findUnique({
+      where: { id: status_id },
+    });
+
+    if (!targetStatus || targetStatus.project_id !== existingTask.project_id) {
+      return new ApiResponse('สถานะที่เลือกไม่ถูกต้อง', 400, null);
+    }
+
+    const updatedTask = await this.prisma.tb_project_tasks.update({
+      where: { id: task_id },
+      data: {
+        status_id,
+        updated_at: new Date(),
+      },
+      include: {
+        user_account: true,
+        tb_project_task_statuses: true,
+        tb_project_sub_tasks: {
+          orderBy: { created_at: 'asc' },
+          include: {
+            tb_project_task_statuses: true,
+            tb_project_sub_task_assignees: {
+              include: {
+                user_account: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    this.eventsGateway.broadcastToProject(existingTask.project_id, 'project:task:moved', {
+      projectId: existingTask.project_id,
+      previousStatusId: existingTask.status_id,
+      newStatusId: updatedTask.status_id,
+      task: updatedTask,
+    });
+
+    return new ApiResponse('อัปเดตสถานะงานสำเร็จ', 200, updatedTask);
+  }
 }
