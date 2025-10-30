@@ -9,7 +9,11 @@
         "email": "Email",
         "fullname": "Fullname",
         "department": "Team",
-        "position": "Position"
+        "position": "Position",
+        "table_no": "#",
+        "title": "Employee List",
+        "subtitle": "View and manage all employees in the system.",
+        "menu_title": "Employee Management"
     },
     "please_fill_in_information": "Please fill in information....",
     "no_data_avaliable": "No data available",

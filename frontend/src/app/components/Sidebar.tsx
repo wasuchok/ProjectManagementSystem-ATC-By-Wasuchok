@@ -24,7 +24,7 @@ const Sidebar = ({ isOpen, onToggle }: any) => {
             key: "employees",
             label: "Employees",
             icon: <FaUsers className="w-5 h-5 mr-3" />,
-            href: "/employees/create",
+            href: "/employees/view",
         },
         {
             key: "manage",
@@ -36,8 +36,8 @@ const Sidebar = ({ isOpen, onToggle }: any) => {
 
     return (
         <div
-            className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border border-gray-100 lg:rounded-xl transform 
-            ${isOpen ? "translate-x-0" : "-translate-x-full"} 
+            className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border border-gray-100 lg:rounded-xl transform
+            ${isOpen ? "translate-x-0" : "-translate-x-full"}
             lg:translate-x-0 transition-transform duration-200 ease-in-out shadow-md`}
         >
 
@@ -56,7 +56,7 @@ const Sidebar = ({ isOpen, onToggle }: any) => {
                         <Link
                             key={item.key}
                             href={item.href}
-                            className={`flex items-center px-3 py-3 text-base rounded-md 
+                            className={`flex items-center px-3 py-3 text-base rounded-md
                                 transition-all duration-200 group
                                 ${isActive
                                     ? "bg-primary-50 text-primary-600 border-r-2 border-primary-600 shadow-sm"

@@ -217,13 +217,48 @@ export class UserAccountService {
     return new ApiResponse('ออกจากระบบสำเร็จ', 200, {});
   }
 
-  async readUsers() {
-    const users = await this.prisma.user_account.findMany({
-      where: { status: 0 },
+  async readUsers(query: any) {
+    const { page = 1, limit = 10, search = '', status } = query;
+
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      AND: [
+        status !== undefined ? { status: Number(status) } : {},
+        search
+          ? {
+              OR: [
+                { username: { contains: search } },
+                { full_name: { contains: search } },
+                { email: { contains: search } },
+                { department: { contains: search } },
+                { position: { contains: search } },
+              ],
+            }
+          : {},
+      ],
+    };
+
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user_account.findMany({
+        where,
+        skip: Number(skip),
+        take: Number(limit),
+        orderBy: { create_date: 'desc' },
+      }),
+      this.prisma.user_account.count({ where }),
+    ]);
+
+    const sanitizedUsers = users.map(
+      ({ password_hash, refresh_token, ...rest }) => rest,
+    );
+
+    return new ApiResponse('เรียกข้อมูลผู้ใช้ทั้งหมด', 200, {
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / limit),
+      limit: Number(limit),
+      data: sanitizedUsers,
     });
-
-    const sanitizedUsers = users.map(({ password_hash, ...rest }) => rest);
-
-    return new ApiResponse('เรียกข้อมูลผู้ใช้ทั้งหมด', 200, sanitizedUsers);
   }
 }

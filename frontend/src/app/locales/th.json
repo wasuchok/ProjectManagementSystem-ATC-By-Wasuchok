@@ -9,7 +9,11 @@
         "email": "อีเมล",
         "fullname": "ชื่อจริง-นามสกุล",
         "department": "ทีม",
-        "position": "ตำแหน่ง"
+        "position": "ตำแหน่ง",
+        "table_no": "ลำดับ",
+        "title": "รายชื่อพนักงาน",
+        "subtitle": "ดูและจัดการข้อมูลพนักงานทั้งหมดในระบบ",
+        "menu_title": "จัดการพนักงาน"
     },
     "please_fill_in_information": "กรุณากรอกข้อมูลให้ครบ....",
     "no_data_avaliable": "ไม่มีข้อมูล",
