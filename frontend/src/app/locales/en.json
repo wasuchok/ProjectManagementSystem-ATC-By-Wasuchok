@@ -98,7 +98,16 @@
         "adjust_percentage": "Adjust Percentage",
         "saving": "Saving...",
         "save_changes": "Save Changes",
-        "projects_overview_subtitle": "Keep track of your ongoing projects and manage invitations from teammates in one focused view."
+        "projects_overview_subtitle": "Keep track of your ongoing projects and manage invitations from teammates in one focused view.",
+        "comments": "Comments",
+        "loading_comments": "Loading comments...",
+        "no_comments": "No comments yet",
+        "failed_to_load_comments": "Unable to load comments",
+        "failed_to_send_comment": "Unable to send comment",
+        "comment_placeholder": "Write your comment...",
+        "comment_submit": "Post Comment",
+        "comment_submitting": "Posting...",
+        "add_comment": "Add Comment"
     },
     "table": {
         "showing_page": "Showing page",

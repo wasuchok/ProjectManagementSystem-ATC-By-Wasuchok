@@ -15,7 +15,12 @@ export const axiosInstance = axios.create({
 axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
-        console.error("❌ API Error:", error.response?.status, error.response?.data);
+        if ((axios.isCancel && axios.isCancel(error)) || error.code === "ERR_CANCELED") {
+            return Promise.reject(error);
+        }
+        const status = error.response?.status ?? error.code ?? "UNKNOWN";
+        const payload = error.response?.data ?? error.message ?? error.toString();
+        console.error("❌ API Error:", status, payload);
         return Promise.reject(error);
     }
 );

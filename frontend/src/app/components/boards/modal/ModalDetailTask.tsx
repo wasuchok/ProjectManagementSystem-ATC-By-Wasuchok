@@ -62,6 +62,24 @@ const normalizeComment = (comment: any): TaskComment => ({
     authorRole: comment.user?.role ?? comment.user?.position ?? comment.role ?? undefined,
 });
 
+const sortComments = (items: TaskComment[]) => {
+    const getTime = (value?: string) => {
+        if (!value) return Number.NaN;
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? Number.NaN : parsed;
+    };
+    return items
+        .slice()
+        .sort((a, b) => {
+            const aTime = getTime(a.createdAt);
+            const bTime = getTime(b.createdAt);
+            if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+            if (Number.isNaN(aTime)) return 1;
+            if (Number.isNaN(bTime)) return -1;
+            return aTime - bTime;
+        });
+};
+
 const normalizeSubtask = (subtask: any): SubtaskSummary => ({
     id: String(subtask.id),
     title: subtask.title ?? "",
@@ -155,6 +173,7 @@ const ModalDetailTask = ({
     const [comments, setComments] = useState<TaskComment[]>([]);
     const [isLoadingComments, setIsLoadingComments] = useState(false);
     const [commentsError, setCommentsError] = useState<string | null>(null);
+    const [commentSubmitError, setCommentSubmitError] = useState<string | null>(null);
     const [newCommentMessage, setNewCommentMessage] = useState('');
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
     const [subtasks, setSubtasks] = useState<SubtaskSummary[]>(() =>
@@ -182,13 +201,16 @@ const ModalDetailTask = ({
         const controller = new AbortController();
         setIsLoadingComments(true);
         setCommentsError(null);
+        setCommentSubmitError(null);
+        setComments([]);
+        setNewCommentMessage("");
 
         apiPrivate
             .get(`/project/task/${selectedTask.id}/comments`, { signal: controller.signal })
             .then((response) => {
                 const payload = response?.data?.data ?? response?.data ?? [];
                 const normalized = Array.isArray(payload) ? payload.map((item: any) => normalizeComment(item)) : [];
-                setComments(normalized);
+                setComments(sortComments(normalized));
             })
             .catch((error: any) => {
                 if (controller.signal.aborted) return;
@@ -397,6 +419,37 @@ const ModalDetailTask = ({
         setEditingSubtaskId(null);
         setIsUpdatingSubtask(false);
         setUpdateError(null);
+    };
+
+    const handleSubmitComment = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!selectedTask?.id) return;
+
+        const trimmedMessage = newCommentMessage.trim();
+        if (!trimmedMessage) return;
+
+        setIsSubmittingComment(true);
+        setCommentSubmitError(null);
+
+        try {
+            const response = await apiPrivate.post(`/project/task/${selectedTask.id}/comments`, {
+                message: trimmedMessage,
+            });
+            const payload = response?.data?.data ?? response?.data;
+            if (Array.isArray(payload)) {
+                const normalized = payload.map((item: any) => normalizeComment(item));
+                setComments((prev) => sortComments([...prev, ...normalized]));
+            } else if (payload) {
+                const normalized = normalizeComment(payload);
+                setComments((prev) => sortComments([...prev, normalized]));
+            }
+            setNewCommentMessage("");
+        } catch (error: any) {
+            console.error("Failed to submit comment", error);
+            setCommentSubmitError(commentsSendErrorLabel);
+        } finally {
+            setIsSubmittingComment(false);
+        }
     };
 
     const handleUpdateSubtask = async (event: FormEvent<HTMLFormElement>) => {
@@ -911,48 +964,73 @@ const ModalDetailTask = ({
                             </p>
                         </div>
                         <div className="max-h-60 space-y-3 overflow-y-auto pr-1">
-                            {mockComments.map((comment) => (
-                                <div
-                                    key={comment.id}
-                                    className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3"
-                                >
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-600">
-                                        {getInitials(comment.author)}
-                                    </div>
-                                    <div className="flex-1 space-y-2">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <p className="text-sm font-semibold text-slate-700">{comment.author}</p>
-                                            {comment.role && (
-                                                <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-600">
-                                                    {comment.role}
-                                                </span>
-                                            )}
-                                            <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
-                                                <FiClock size={11} />
-                                                {comment.timestamp}
-                                            </span>
+                            {isLoadingComments ? (
+                                <p className="text-xs text-slate-500">{commentsLoadingLabel}</p>
+                            ) : commentsError ? (
+                                <p className="text-xs font-semibold text-rose-500">{commentsError}</p>
+                            ) : comments.length === 0 ? (
+                                <p className="text-xs text-slate-500">{commentsEmptyLabel}</p>
+                            ) : (
+                                comments.map((comment) => {
+                                    const author = comment.authorName ?? comment.userId;
+                                    const displayTime = comment.createdAt ? formatDateTime(comment.createdAt) : undefined;
+                                    return (
+                                        <div
+                                            key={comment.id}
+                                            className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3"
+                                        >
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-600">
+                                                {getInitials(author)}
+                                            </div>
+                                            <div className="flex-1 space-y-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <p className="text-sm font-semibold text-slate-700">{author}</p>
+                                                    {comment.authorRole && (
+                                                        <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-600">
+                                                            {comment.authorRole}
+                                                        </span>
+                                                    )}
+                                                    {displayTime && (
+                                                        <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
+                                                            <FiClock size={11} />
+                                                            {displayTime}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">
+                                                    {comment.message}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">
-                                            {comment.message}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
+                                    );
+                                })
+                            )}
                         </div>
-                        <div className="mt-4 space-y-2">
+                        <form className="mt-4 space-y-2" onSubmit={handleSubmitComment}>
                             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                เพิ่มความคิดเห็น
+                                {resolveLabel('project.add_comment', 'เพิ่มความคิดเห็น')}
                             </label>
                             <textarea
-                                disabled
                                 rows={3}
-                                placeholder="พื้นที่เพิ่มความคิดเห็นจะพร้อมใช้งานในเวอร์ชันถัดไป"
-                                className="w-full resize-none rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 placeholder:text-slate-400 focus:outline-none"
+                                value={newCommentMessage}
+                                onChange={(event) => setNewCommentMessage(event.target.value)}
+                                placeholder={commentsPlaceholder}
+                                className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                                disabled={isSubmittingComment}
                             />
-                            <p className="text-[11px] text-slate-400">
-                                * แสดงข้อมูลตัวอย่างเท่านั้น ระบบคอมเมนต์จริงจะพร้อมใช้งานเร็วๆ นี้
-                            </p>
-                        </div>
+                            {commentSubmitError && (
+                                <p className="text-xs font-semibold text-rose-500">{commentSubmitError}</p>
+                            )}
+                            <div className="flex items-center justify-end">
+                                <button
+                                    type="submit"
+                                    disabled={isSubmittingComment || !newCommentMessage.trim()}
+                                    className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1 disabled:cursor-not-allowed disabled:bg-primary-300"
+                                >
+                                    {isSubmittingComment ? commentsSubmittingLabel : commentsSubmitLabel}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </MinimalModal>

@@ -131,6 +131,38 @@ export class ProjectController {
     return this.projectService.createSubtask(Number(task_id), body);
   }
 
+  @Get('/task/:task_id/comments')
+  @Roles('admin', 'staff', 'employee')
+  async getTaskComments(@Param('task_id') task_id: string) {
+    return this.projectService.getTaskComments(Number(task_id));
+  }
+
+  @Post('/task/:task_id/comments')
+  @Roles('admin', 'staff', 'employee')
+  async createTaskComment(
+    @Param('task_id') task_id: string,
+    @Body('message') message: string,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : '';
+
+    if (!userId) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 401, null);
+    }
+
+    return this.projectService.createTaskComment(
+      Number(task_id),
+      userId,
+      message,
+    );
+  }
+
   @Get('/members/:project_id')
   @Roles('admin', 'staff', 'employee')
   async getProjectMembers(@Param('project_id') project_id: string) {

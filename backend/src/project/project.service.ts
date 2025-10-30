@@ -39,6 +39,45 @@ export class ProjectService {
     return code!;
   }
 
+  private formatTaskComment(comment: any) {
+    if (!comment) return null;
+    return {
+      id: String(comment.id),
+      taskId:
+        comment.task_id != null
+          ? String(comment.task_id)
+          : comment.taskId != null
+            ? String(comment.taskId)
+            : null,
+      userId:
+        comment.user_id != null
+          ? String(comment.user_id)
+          : comment.userId != null
+            ? String(comment.userId)
+            : null,
+      message: comment.message ?? '',
+      createdAt: comment.created_at
+        ? comment.created_at.toISOString()
+        : comment.createdAt ?? null,
+      updatedAt: comment.updated_at
+        ? comment.updated_at.toISOString()
+        : comment.updatedAt ?? null,
+      authorName:
+        comment.user_account?.full_name ??
+        comment.user_account?.fullName ??
+        comment.user_account?.username ??
+        comment.authorName ??
+        null,
+      authorRole:
+        comment.user_account?.position ??
+        comment.user_account?.role ??
+        comment.authorRole ??
+        null,
+      authorDepartment:
+        comment.user_account?.department ?? comment.authorDepartment ?? null,
+    };
+  }
+
   async createProject(createProjectDto: CreateProjectDto) {
     const {
       name,
@@ -663,6 +702,97 @@ export class ProjectService {
     });
 
     return new ApiResponse('อัปเดตงานย่อยสำเร็จ', 200, subtaskWithRelations);
+  }
+
+  async getTaskComments(task_id: number) {
+    if (!task_id) {
+      return new ApiResponse('กรุณาระบุงาน', 400, null);
+    }
+
+    const task = await this.prisma.tb_project_tasks.findUnique({
+      where: { id: task_id },
+      select: { id: true },
+    });
+
+    if (!task) {
+      return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
+    const comments = await this.prisma.tb_project_task_comments.findMany({
+      where: { task_id },
+      orderBy: { created_at: 'asc' },
+      include: {
+        user_account: true,
+      },
+    });
+
+    return new ApiResponse(
+      'ดึงข้อมูลความคิดเห็นสำเร็จ',
+      200,
+      comments.map((comment) => this.formatTaskComment(comment)),
+    );
+  }
+
+  async createTaskComment(
+    task_id: number,
+    userId: string,
+    message: string,
+  ) {
+    if (!task_id) {
+      return new ApiResponse('กรุณาระบุงาน', 400, null);
+    }
+    const trimmedMessage = message?.trim();
+    if (!trimmedMessage) {
+      return new ApiResponse('กรุณาระบุข้อความความคิดเห็น', 400, null);
+    }
+    if (!userId) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 401, null);
+    }
+
+    const task = await this.prisma.tb_project_tasks.findUnique({
+      where: { id: task_id },
+      select: { id: true, project_id: true },
+    });
+
+    if (!task) {
+      return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
+    const user = await this.prisma.user_account.findUnique({
+      where: { user_id: userId },
+      select: { user_id: true },
+    });
+
+    if (!user) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 404, null);
+    }
+
+    const created = await this.prisma.tb_project_task_comments.create({
+      data: {
+        task_id,
+        user_id: userId,
+        message: trimmedMessage,
+      },
+      include: {
+        user_account: true,
+      },
+    });
+
+    const formatted = this.formatTaskComment(created);
+
+    if (task.project_id != null) {
+      this.eventsGateway.broadcastToProject(
+        task.project_id,
+        'project:task:comment:created',
+        {
+          projectId: task.project_id,
+          taskId: task_id,
+          comment: formatted,
+        },
+      );
+    }
+
+    return new ApiResponse('สร้างความคิดเห็นสำเร็จ', 201, formatted);
   }
 
   async moveTask(task_id: number, status_id: number) {
