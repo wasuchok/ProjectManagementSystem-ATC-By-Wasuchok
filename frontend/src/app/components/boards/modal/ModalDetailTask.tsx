@@ -2,7 +2,7 @@ import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiPlus, FiUser } from "react-icons/fi";
+import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiMessageCircle, FiPlus, FiUser } from "react-icons/fi";
 import MinimalModal from "../../MinimalModal";
 
 type AssigneeOption = {
@@ -33,6 +33,34 @@ type SubtaskSummary = {
     updatedAt?: string;
     assignees?: SubtaskAssigneeSummary[];
 };
+
+type TaskComment = {
+    id: string;
+    taskId?: string;
+    userId: string;
+    message: string;
+    createdAt?: string;
+    updatedAt?: string;
+    authorName?: string;
+    authorRole?: string;
+};
+
+const normalizeComment = (comment: any): TaskComment => ({
+    id: String(comment.id),
+    taskId: comment.task_id != null ? String(comment.task_id) : comment.taskId ?? undefined,
+    userId: comment.user_id ?? comment.userId ?? "",
+    message: comment.message ?? "",
+    createdAt: comment.created_at ?? comment.createdAt ?? undefined,
+    updatedAt: comment.updated_at ?? comment.updatedAt ?? undefined,
+    authorName:
+        comment.user?.full_name ??
+        comment.user?.fullName ??
+        comment.user?.username ??
+        comment.full_name ??
+        comment.fullName ??
+        undefined,
+    authorRole: comment.user?.role ?? comment.user?.position ?? comment.role ?? undefined,
+});
 
 const normalizeSubtask = (subtask: any): SubtaskSummary => ({
     id: String(subtask.id),
@@ -101,6 +129,34 @@ const ModalDetailTask = ({
     onTaskProgressChanged,
 }: ModalDetailTaskProps) => {
     const { t } = useLanguage()
+    const resolveLabel = (key: string, fallback: string) => {
+        const translated = t(key);
+        return translated && translated !== key ? translated : fallback;
+    };
+    const commentSectionTitle = resolveLabel('project.comments', 'ความคิดเห็น');
+    const commentsLoadingLabel = resolveLabel('project.loading_comments', 'กำลังโหลดความคิดเห็น...');
+    const commentsEmptyLabel = resolveLabel('project.no_comments', 'ยังไม่มีความคิดเห็น');
+    const commentsErrorLabel = resolveLabel('project.failed_to_load_comments', 'ไม่สามารถโหลดความคิดเห็นได้');
+    const commentsSendErrorLabel = resolveLabel('project.failed_to_send_comment', 'ไม่สามารถส่งความคิดเห็นได้');
+    const commentsPlaceholder = resolveLabel('project.comment_placeholder', 'พิมพ์ความคิดเห็นของคุณ...');
+    const commentsSubmitLabel = resolveLabel('project.comment_submit', 'ส่งความคิดเห็น');
+    const commentsSubmittingLabel = resolveLabel('project.comment_submitting', 'กำลังส่ง...');
+    const getInitials = (value: string) => {
+        if (!value) return "?";
+        const parts = value.trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) {
+            return "?";
+        }
+        if (parts.length === 1) {
+            return parts[0].slice(0, 2).toUpperCase();
+        }
+        return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    };
+    const [comments, setComments] = useState<TaskComment[]>([]);
+    const [isLoadingComments, setIsLoadingComments] = useState(false);
+    const [commentsError, setCommentsError] = useState<string | null>(null);
+    const [newCommentMessage, setNewCommentMessage] = useState('');
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false);
     const [subtasks, setSubtasks] = useState<SubtaskSummary[]>(() =>
         Array.isArray(selectedTask?.subtasks) ? selectedTask.subtasks.map((sub: any) => normalizeSubtask(sub)) : []
     );
@@ -117,6 +173,36 @@ const ModalDetailTask = ({
     const [isUpdatingSubtask, setIsUpdatingSubtask] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
     const lastEmittedProgressRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (!isTaskModalOpen || !selectedTask?.id) {
+            return;
+        }
+
+        const controller = new AbortController();
+        setIsLoadingComments(true);
+        setCommentsError(null);
+
+        apiPrivate
+            .get(`/project/task/${selectedTask.id}/comments`, { signal: controller.signal })
+            .then((response) => {
+                const payload = response?.data?.data ?? response?.data ?? [];
+                const normalized = Array.isArray(payload) ? payload.map((item: any) => normalizeComment(item)) : [];
+                setComments(normalized);
+            })
+            .catch((error: any) => {
+                if (controller.signal.aborted) return;
+                console.error("Failed to load comments", error);
+                setCommentsError(commentsErrorLabel);
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setIsLoadingComments(false);
+                }
+            });
+
+        return () => controller.abort();
+    }, [isTaskModalOpen, selectedTask?.id, commentsErrorLabel]);
 
     const buildDefaultFormValues = useMemo(() => {
         return () => {
@@ -256,6 +342,7 @@ const ModalDetailTask = ({
                 start_date: formValues.startDate || undefined,
                 has_due_date: formValues.hasDueDate,
                 due_date: formValues.hasDueDate && formValues.dueDate ? formValues.dueDate : undefined,
+                changed_by: user?.id
             };
 
             if (formValues.assigneeIds.length > 0) {
@@ -810,6 +897,61 @@ const ModalDetailTask = ({
                                     );
                                 })
                             )}
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                        <div className="mb-4 flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide">
+                                <FiMessageCircle size={14} />
+                                {commentSectionTitle}
+                            </div>
+                            <p className="text-xs text-slate-400">
+                                ข้อความจำลองสำหรับออกแบบส่วนแสดงความคิดเห็น ระบบจริงจะเชื่อมต่อในขั้นต่อไป
+                            </p>
+                        </div>
+                        <div className="max-h-60 space-y-3 overflow-y-auto pr-1">
+                            {mockComments.map((comment) => (
+                                <div
+                                    key={comment.id}
+                                    className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3"
+                                >
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-600">
+                                        {getInitials(comment.author)}
+                                    </div>
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <p className="text-sm font-semibold text-slate-700">{comment.author}</p>
+                                            {comment.role && (
+                                                <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-600">
+                                                    {comment.role}
+                                                </span>
+                                            )}
+                                            <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
+                                                <FiClock size={11} />
+                                                {comment.timestamp}
+                                            </span>
+                                        </div>
+                                        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">
+                                            {comment.message}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-4 space-y-2">
+                            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                เพิ่มความคิดเห็น
+                            </label>
+                            <textarea
+                                disabled
+                                rows={3}
+                                placeholder="พื้นที่เพิ่มความคิดเห็นจะพร้อมใช้งานในเวอร์ชันถัดไป"
+                                className="w-full resize-none rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 placeholder:text-slate-400 focus:outline-none"
+                            />
+                            <p className="text-[11px] text-slate-400">
+                                * แสดงข้อมูลตัวอย่างเท่านั้น ระบบคอมเมนต์จริงจะพร้อมใช้งานเร็วๆ นี้
+                            </p>
                         </div>
                     </div>
                 </div>

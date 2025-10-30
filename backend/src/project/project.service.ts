@@ -546,11 +546,20 @@ export class ProjectService {
 
     await this.recalculateTaskProgress(task_id);
 
-    return new ApiResponse(
-      'สร้างงานย่อยสำเร็จ',
-      201,
-      subtaskWithRelations,
-    );
+    await this.prisma.tb_project_task_logs.create({
+      data: {
+        task_id: task_id,
+        subtask_id: created.id,
+        changed_by: data.changed_by,
+        old_status_id: task.status_id ?? 0,
+        new_status_id: statusId,
+        old_progress: 0.0,
+        new_progress: progressPercent ?? 0.0,
+        created_at: new Date(),
+      },
+    });
+
+    return new ApiResponse('สร้างงานย่อยสำเร็จ', 201, subtaskWithRelations);
   }
 
   async updateSubtask(
@@ -585,10 +594,15 @@ export class ProjectService {
       return new ApiResponse('คุณไม่มีสิทธิ์อัปเดตงานย่อยนี้', 403, null);
     }
 
+    // ✅ เก็บค่าเก่าก่อนอัปเดต
+    const oldStatusId = subtask.status_id ?? 0;
+    const oldProgress = Number(subtask.progress_percent ?? 0);
+
     const updateData: Prisma.tb_project_sub_tasksUncheckedUpdateInput = {
       updated_at: new Date(),
     };
 
+    // ✅ อัปเดต progress ถ้ามี
     if (data.progress_percent != null) {
       const progressNumber = Number(data.progress_percent);
       if (!Number.isNaN(progressNumber)) {
@@ -599,11 +613,21 @@ export class ProjectService {
       }
     }
 
+    // ✅ อัปเดต status ถ้ามี
+    if (data.status_id != null) {
+      const statusNumber = Number(data.status_id);
+      if (!Number.isNaN(statusNumber)) {
+        updateData.status_id = statusNumber;
+      }
+    }
+
+    // ✅ อัปเดตข้อมูลใน DB
     await this.prisma.tb_project_sub_tasks.update({
       where: { id: subtask.id },
       data: updateData,
     });
 
+    // ✅ ดึงข้อมูลล่าสุด (หลังอัปเดต)
     const subtaskWithRelations =
       await this.prisma.tb_project_sub_tasks.findUnique({
         where: { id: subtask.id },
@@ -617,7 +641,26 @@ export class ProjectService {
         },
       });
 
+    // ✅ คำนวณความคืบหน้าใหม่ของ task หลัก
     await this.recalculateTaskProgress(task_id);
+
+    // ✅ เพิ่ม Log การอัปเดต
+    await this.prisma.tb_project_task_logs.create({
+      data: {
+        task_id,
+        subtask_id: subtask.id,
+        changed_by: userId,
+        old_status_id: oldStatusId,
+        new_status_id: updateData.status_id
+          ? Number(updateData.status_id)
+          : oldStatusId,
+        old_progress: oldProgress,
+        new_progress: updateData.progress_percent
+          ? Number(updateData.progress_percent)
+          : oldProgress,
+        created_at: new Date(),
+      },
+    });
 
     return new ApiResponse('อัปเดตงานย่อยสำเร็จ', 200, subtaskWithRelations);
   }
@@ -666,12 +709,16 @@ export class ProjectService {
       },
     });
 
-    this.eventsGateway.broadcastToProject(existingTask.project_id, 'project:task:moved', {
-      projectId: existingTask.project_id,
-      previousStatusId: existingTask.status_id,
-      newStatusId: updatedTask.status_id,
-      task: updatedTask,
-    });
+    this.eventsGateway.broadcastToProject(
+      existingTask.project_id,
+      'project:task:moved',
+      {
+        projectId: existingTask.project_id,
+        previousStatusId: existingTask.status_id,
+        newStatusId: updatedTask.status_id,
+        task: updatedTask,
+      },
+    );
 
     return new ApiResponse('อัปเดตสถานะงานสำเร็จ', 200, updatedTask);
   }
