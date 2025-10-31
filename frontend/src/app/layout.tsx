@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import SplashScreen from "./components/SplashScreen";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { UserProvider } from "./contexts/UserContext";
 import { SocketProvider } from "./providers/SocketProvider";
@@ -30,6 +31,7 @@ export default function RootLayout({
         <LanguageProvider>
           <UserProvider>
             <SocketProvider>
+              <SplashScreen />
               {children}
             </SocketProvider>
           </UserProvider>
