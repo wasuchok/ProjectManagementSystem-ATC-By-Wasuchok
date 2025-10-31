@@ -1,0 +1,89 @@
+        const items: Array<{
+            id: string;
+            taskId: string;
+            taskTitle: string;
+            subtaskId: string;
+            subtaskTitle: string;
+            owner: string;
+            progress: number;
+            start: Date;
+            plannedEnd: Date;
+            actualEnd: Date;
+            displayEnd: Date;
+            durationLabel: string;
+            statusLabel?: string | null;
+            statusColor?: string | null;
+            isLate: boolean;
+            updates: Array<{ timestamp: Date; progress: number | null }>;
+            completedDate?: Date | null;
+            dueDate?: Date | null;
+        }> = [];
+
+        const isTruthy = (value: any) =>
+            value === true ||
+            value === "true" ||
+            value === 1 ||
+            value === "1";
+
+        boards.forEach((board) => {
+            board.tasks?.forEach((task) => {
+                const subtasks = Array.isArray(task.subtasks) ? task.subtasks : [];
+                subtasks.forEach((subtask) => {
+                    const start = parseDateValue(subtask.startDate);
+                    if (!start) return;
+
+                    const dueDate = parseDateValue(subtask.dueDate);
+                    const completedDate = parseDateValue(subtask.completedDate);
+                    const hasDue = isTruthy(subtask.hasDueDate) || Boolean(subtask.dueDate);
+                    const plannedEnd = hasDue && dueDate
+                        ? dueDate
+                        : new Date(start.getTime() + MS_PER_DAY);
+                    const actualEnd = completedDate ?? plannedEnd;
+                    const displayEnd = actualEnd > plannedEnd ? actualEnd : plannedEnd;
+
+                    const statusMeta = subtask.statusId ? statusLookup.get(String(subtask.statusId)) : undefined;
+                    const owner =
+                        (subtask.assignees && subtask.assignees[0]?.fullName) ||
+                        (subtask.assignees && subtask.assignees[0]?.userId) ||
+                        t('project.gantt_owner_unassigned');
+                    const progress = getProgressValue(subtask.progressPercent);
+                    const displayDurationDays = Math.max(1, Math.round((displayEnd.getTime() - start.getTime()) / MS_PER_DAY) || 1);
+                    const durationLabel =
+                        displayDurationDays === 1
+                            ? t('project.gantt_duration_day')
+                            : fillTemplate(t('project.gantt_duration_days'), { count: String(displayDurationDays) });
+                    const updates = timelineBySubtask.get(String(subtask.id)) ?? [];
+                    const isLate =
+                        progress >= 100 &&
+                        hasDue &&
+                        dueDate != null &&
+                        completedDate != null &&
+                        completedDate.getTime() > dueDate.getTime();
+
+                    items.push({
+                        id: `${task.id}-${subtask.id}`,
+                        taskId: task.id,
+                        taskTitle: task.title ?? t('project.task_logs_untitled_task'),
+                        subtaskId: subtask.id,
+                        subtaskTitle: subtask.title ?? "",
+                        owner,
+                        progress,
+                        start,
+                        plannedEnd,
+                        actualEnd,
+                        displayEnd,
+                        durationLabel,
+                        statusLabel: subtask.statusLabel ?? statusMeta?.title ?? null,
+                        statusColor: statusMeta?.color ?? board.color ?? null,
+                        isLate,
+                        updates,
+                        completedDate,
+                        dueDate: hasDue ? dueDate ?? null : null,
+                    });
+                });
+            });
+        });
+
+        return items.sort((a, b) => a.start.getTime() - b.start.getTime());
+    }, [boards, parseDateValue, statusLookup, getProgressValue, fillTemplate, t, timelineBySubtask]);
+

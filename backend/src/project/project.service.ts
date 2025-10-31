@@ -786,6 +786,15 @@ export class ProjectService {
           100,
           Math.max(0, progressNumber),
         );
+        // auto handle completed_date based on progress
+        if (Number(updateData.progress_percent) >= 100) {
+          const dateFromBody = data.completed_date
+            ? new Date(data.completed_date)
+            : undefined;
+          updateData.completed_date = dateFromBody ?? new Date();
+        } else {
+          updateData.completed_date = null;
+        }
         if (data.status_id == null) {
           const statuses =
             await this.prisma.tb_project_task_statuses.findMany({
@@ -809,6 +818,13 @@ export class ProjectService {
           }
         }
       }
+    }
+
+    // ✅ allow explicit completed_date update when progress not provided
+    if (data.progress_percent == null && 'completed_date' in data) {
+      updateData.completed_date = data.completed_date
+        ? new Date(data.completed_date)
+        : null;
     }
 
     // ✅ อัปเดต status ถ้ามี
@@ -865,6 +881,17 @@ export class ProjectService {
       200,
       this.formatSubtask(subtaskWithRelations),
     );
+  }
+
+  async updateSubtaskById(subtask_id: number, userId: string, data: any) {
+    const sub = await this.prisma.tb_project_sub_tasks.findUnique({
+      where: { id: subtask_id },
+      select: { id: true, task_id: true },
+    });
+    if (!sub) {
+      return new ApiResponse('ไม่พบงานย่อยที่ต้องการ', 404, null);
+    }
+    return this.updateSubtask(Number(sub.task_id), Number(sub.id), userId, data);
   }
 
   async getTaskComments(task_id: number) {

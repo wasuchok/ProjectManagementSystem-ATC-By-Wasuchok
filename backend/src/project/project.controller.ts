@@ -201,6 +201,29 @@ export class ProjectController {
     );
   }
 
+  // Alias endpoint to update subtask by id only
+  @Patch('/sub-task/:subtask_id')
+  @Roles('admin', 'staff', 'employee')
+  async updateSubtaskById(
+    @Param('subtask_id') subtask_id: string,
+    @Body() body: any,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : '';
+
+    return this.projectService.updateSubtaskById(
+      Number(subtask_id),
+      userId,
+      body,
+    );
+  }
+
   @Patch('/task/:task_id/move')
   @Roles('admin', 'staff', 'employee')
   async moveTask(
