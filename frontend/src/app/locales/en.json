@@ -107,7 +107,11 @@
         "comment_placeholder": "Write your comment...",
         "comment_submit": "Post Comment",
         "comment_submitting": "Posting...",
-        "add_comment": "Add Comment"
+        "add_comment": "Add Comment",
+        "typing_single_suffix": "is typing...",
+        "typing_plural_suffix": "are typing...",
+        "typing_more_suffix": "and {count} others are typing...",
+        "typing_connector": "and"
     },
     "table": {
         "showing_page": "Showing page",

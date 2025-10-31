@@ -4,7 +4,7 @@ import axiosInstance from "./axiosConfig";
 
 let isRefreshing = false;
 let failedQueue: any[] = [];
-const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5555/api/v1";
+const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://10.17.3.244:5555/api/v1";
 
 const processQueue = (error: any, token: string | null = null) => {
     failedQueue.forEach((prom) => {

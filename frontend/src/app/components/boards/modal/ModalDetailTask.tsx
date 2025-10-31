@@ -1,7 +1,8 @@
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { getSocket } from "@/app/utils/socket";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiMessageCircle, FiPlus, FiUser } from "react-icons/fi";
 import MinimalModal from "../../MinimalModal";
 
@@ -45,7 +46,7 @@ type TaskComment = {
     authorRole?: string;
 };
 
-const normalizeComment = (comment: any): TaskComment => ({
+const normalizeComment = (comment: any): any => ({
     id: String(comment.id),
     taskId: comment.task_id != null ? String(comment.task_id) : comment.taskId ?? undefined,
     userId: comment.user_id ?? comment.userId ?? "",
@@ -53,13 +54,10 @@ const normalizeComment = (comment: any): TaskComment => ({
     createdAt: comment.created_at ?? comment.createdAt ?? undefined,
     updatedAt: comment.updated_at ?? comment.updatedAt ?? undefined,
     authorName:
-        comment.user?.full_name ??
-        comment.user?.fullName ??
-        comment.user?.username ??
-        comment.full_name ??
-        comment.fullName ??
-        undefined,
-    authorRole: comment.user?.role ?? comment.user?.position ?? comment.role ?? undefined,
+        comment.authorName,
+    undefined,
+    authorRole: comment.authorDepartment ?? undefined,
+    data: comment
 });
 
 const sortComments = (items: TaskComment[]) => {
@@ -79,6 +77,24 @@ const sortComments = (items: TaskComment[]) => {
             return aTime - bTime;
         });
 };
+
+const mergeUniqueComments = (
+    existing: any[],
+    incoming: any[]
+) => {
+    const map = new Map<string, any>();
+    existing.forEach((comment) => {
+        map.set(comment.id, comment);
+    });
+    incoming.forEach((comment) => {
+        map.set(comment.id, comment);
+    });
+    return sortComments(Array.from(map.values()));
+};
+
+const TYPING_IDLE_TIMEOUT = 3000;
+const TYPING_CLEANUP_INTERVAL = 3000;
+const MAX_TYPING_DISPLAY_NAMES = 2;
 
 const normalizeSubtask = (subtask: any): SubtaskSummary => ({
     id: String(subtask.id),
@@ -159,6 +175,10 @@ const ModalDetailTask = ({
     const commentsPlaceholder = resolveLabel('project.comment_placeholder', 'พิมพ์ความคิดเห็นของคุณ...');
     const commentsSubmitLabel = resolveLabel('project.comment_submit', 'ส่งความคิดเห็น');
     const commentsSubmittingLabel = resolveLabel('project.comment_submitting', 'กำลังส่ง...');
+    const typingSingleSuffix = resolveLabel('project.typing_single_suffix', 'กำลังพิมพ์...');
+    const typingPluralSuffix = resolveLabel('project.typing_plural_suffix', 'กำลังพิมพ์...');
+    const typingMoreSuffix = resolveLabel('project.typing_more_suffix', 'และอีก {count} คนกำลังพิมพ์...');
+    const typingConnector = resolveLabel('project.typing_connector', 'และ');
     const getInitials = (value: string) => {
         if (!value) return "?";
         const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -173,6 +193,7 @@ const ModalDetailTask = ({
     const [comments, setComments] = useState<TaskComment[]>([]);
     const [isLoadingComments, setIsLoadingComments] = useState(false);
     const [commentsError, setCommentsError] = useState<string | null>(null);
+    const [typingUsers, setTypingUsers] = useState<Record<string, { name: string; expiresAt: number }>>({});
     const [commentSubmitError, setCommentSubmitError] = useState<string | null>(null);
     const [newCommentMessage, setNewCommentMessage] = useState('');
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
@@ -187,11 +208,56 @@ const ModalDetailTask = ({
     const [formValues, setFormValues] = useState<SubtaskFormValues>(createEmptyFormValues);
     const { user } = useUser();
     const currentUserId = user?.id != null ? String(user.id) : undefined;
+    const currentUserName = user?.full_name ?? user?.username ?? currentUserId ?? "";
     const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
     const [editProgressPercent, setEditProgressPercent] = useState<string>("0");
     const [isUpdatingSubtask, setIsUpdatingSubtask] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
     const lastEmittedProgressRef = useRef<number | null>(null);
+    const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hasActiveTypingRef = useRef(false);
+    const typingMessage = useMemo(() => {
+        const entries = Object.values(typingUsers);
+        if (entries.length === 0) return "";
+        const names = Array.from(
+            new Set(
+                entries
+                    .slice()
+                    .sort((a, b) => a.expiresAt - b.expiresAt)
+                    .map((entry) => entry.name?.trim())
+                    .filter((name): name is string => Boolean(name))
+            )
+        );
+        if (names.length === 0) return "";
+        if (names.length === 1) {
+            return `${names[0]} ${typingSingleSuffix}`;
+        }
+        if (names.length === 2) {
+            return `${names[0]} ${typingConnector} ${names[1]} ${typingPluralSuffix}`;
+        }
+        const [first, second] = names;
+        const remainingCount = Math.max(0, names.length - MAX_TYPING_DISPLAY_NAMES);
+        return `${first}, ${second} ${typingMoreSuffix.replace("{count}", String(remainingCount))}`;
+    }, [typingUsers, typingSingleSuffix, typingPluralSuffix, typingMoreSuffix, typingConnector]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setTypingUsers((prev) => {
+                const entries = Object.entries(prev);
+                if (entries.length === 0) return prev;
+                const now = Date.now();
+                const filtered = entries.filter(([, info]) => info.expiresAt > now);
+                if (filtered.length === entries.length) return prev;
+                const next: Record<string, { name: string; expiresAt: number }> = {};
+                filtered.forEach(([userId, info]) => {
+                    next[userId] = info;
+                });
+                return next;
+            });
+        }, TYPING_CLEANUP_INTERVAL);
+
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         if (!isTaskModalOpen || !selectedTask?.id) {
@@ -210,7 +276,7 @@ const ModalDetailTask = ({
             .then((response) => {
                 const payload = response?.data?.data ?? response?.data ?? [];
                 const normalized = Array.isArray(payload) ? payload.map((item: any) => normalizeComment(item)) : [];
-                setComments(sortComments(normalized));
+                setComments(mergeUniqueComments([], normalized));
             })
             .catch((error: any) => {
                 if (controller.signal.aborted) return;
@@ -225,6 +291,113 @@ const ModalDetailTask = ({
 
         return () => controller.abort();
     }, [isTaskModalOpen, selectedTask?.id, commentsErrorLabel]);
+
+    const emitTypingStart = useCallback(() => {
+        if (!selectedTask?.id || !currentUserId) return;
+        const socket = getSocket();
+        if (!socket.connected) socket.connect();
+        socket.emit('task:typing:start', {
+            taskId: selectedTask.id,
+            userId: currentUserId,
+            displayName: currentUserName || currentUserId,
+        });
+        hasActiveTypingRef.current = true;
+    }, [selectedTask?.id, currentUserId, currentUserName]);
+
+    const emitTypingStop = useCallback(() => {
+        if (typingStopTimerRef.current) {
+            clearTimeout(typingStopTimerRef.current);
+            typingStopTimerRef.current = null;
+        }
+        if (!hasActiveTypingRef.current) {
+            return;
+        }
+        if (!selectedTask?.id || !currentUserId) {
+            hasActiveTypingRef.current = false;
+            return;
+        }
+        const socket = getSocket();
+        if (socket.connected) {
+            socket.emit('task:typing:stop', {
+                taskId: selectedTask.id,
+                userId: currentUserId,
+            });
+        }
+        hasActiveTypingRef.current = false;
+    }, [selectedTask?.id, currentUserId]);
+
+    useEffect(() => {
+        if (!isTaskModalOpen || !selectedTask?.id) {
+            return;
+        }
+
+        const socket = getSocket();
+        if (!socket.connected) socket.connect();
+
+        const taskId = selectedTask.id;
+        setTypingUsers({});
+
+        const handleCommentCreated = (payload: any) => {
+            if (!payload) return;
+            const payloadTaskId = payload.taskId ?? payload.comment?.taskId ?? payload.comment?.task_id;
+            if (payloadTaskId == null || Number(payloadTaskId) !== Number(taskId)) return;
+
+            const normalized = normalizeComment(payload.comment ?? payload);
+            setComments((prev) => mergeUniqueComments(prev, [normalized]));
+            setTypingUsers((prev) => {
+                if (!normalized.userId || !(normalized.userId in prev)) {
+                    return prev;
+                }
+                const next = { ...prev };
+                delete next[normalized.userId];
+                return next;
+            });
+        };
+
+        const handleTypingStart = (payload: any) => {
+            if (!payload?.taskId || Number(payload.taskId) !== Number(taskId)) return;
+            if (!payload?.userId || payload.userId === currentUserId) return;
+            const displayName = payload.displayName ?? payload.userId;
+            setTypingUsers((prev) => ({
+                ...prev,
+                [payload.userId]: {
+                    name: displayName,
+                    expiresAt: Date.now() + TYPING_IDLE_TIMEOUT,
+                },
+            }));
+        };
+
+        const handleTypingStop = (payload: any) => {
+            if (!payload?.taskId || Number(payload.taskId) !== Number(taskId)) return;
+            if (!payload?.userId || payload.userId === currentUserId) return;
+            setTypingUsers((prev) => {
+                if (!(payload.userId in prev)) return prev;
+                const next = { ...prev };
+                delete next[payload.userId];
+                return next;
+            });
+        };
+
+        socket.emit('joinTask', { taskId });
+        socket.on('project:task:comment:created', handleCommentCreated);
+        socket.on('task:typing:start', handleTypingStart);
+        socket.on('task:typing:stop', handleTypingStop);
+
+        return () => {
+            socket.emit('leaveTask', { taskId });
+            socket.off('project:task:comment:created', handleCommentCreated);
+            socket.off('task:typing:start', handleTypingStart);
+            socket.off('task:typing:stop', handleTypingStop);
+            emitTypingStop();
+        };
+    }, [isTaskModalOpen, selectedTask?.id, currentUserId, emitTypingStop]);
+
+    useEffect(() => {
+        if (!isTaskModalOpen) {
+            setTypingUsers({});
+            emitTypingStop();
+        }
+    }, [isTaskModalOpen, emitTypingStop]);
 
     const buildDefaultFormValues = useMemo(() => {
         return () => {
@@ -421,6 +594,25 @@ const ModalDetailTask = ({
         setUpdateError(null);
     };
 
+    const handleCommentInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+        const value = event.target.value;
+        setNewCommentMessage(value);
+        if (!selectedTask?.id || !currentUserId) return;
+        if (!hasActiveTypingRef.current) {
+            emitTypingStart();
+        }
+        if (typingStopTimerRef.current) {
+            clearTimeout(typingStopTimerRef.current);
+        }
+        typingStopTimerRef.current = setTimeout(() => {
+            emitTypingStop();
+        }, TYPING_IDLE_TIMEOUT);
+    };
+
+    const handleCommentInputBlur = () => {
+        emitTypingStop();
+    };
+
     const handleSubmitComment = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!selectedTask?.id) return;
@@ -438,10 +630,10 @@ const ModalDetailTask = ({
             const payload = response?.data?.data ?? response?.data;
             if (Array.isArray(payload)) {
                 const normalized = payload.map((item: any) => normalizeComment(item));
-                setComments((prev) => sortComments([...prev, ...normalized]));
+                setComments((prev) => mergeUniqueComments(prev, normalized));
             } else if (payload) {
                 const normalized = normalizeComment(payload);
-                setComments((prev) => sortComments([...prev, normalized]));
+                setComments((prev) => mergeUniqueComments(prev, [normalized]));
             }
             setNewCommentMessage("");
         } catch (error: any) {
@@ -449,6 +641,7 @@ const ModalDetailTask = ({
             setCommentSubmitError(commentsSendErrorLabel);
         } finally {
             setIsSubmittingComment(false);
+            emitTypingStop();
         }
     };
 
@@ -959,9 +1152,6 @@ const ModalDetailTask = ({
                                 <FiMessageCircle size={14} />
                                 {commentSectionTitle}
                             </div>
-                            <p className="text-xs text-slate-400">
-                                ข้อความจำลองสำหรับออกแบบส่วนแสดงความคิดเห็น ระบบจริงจะเชื่อมต่อในขั้นต่อไป
-                            </p>
                         </div>
                         <div className="max-h-60 space-y-3 overflow-y-auto pr-1">
                             {isLoadingComments ? (
@@ -972,7 +1162,9 @@ const ModalDetailTask = ({
                                 <p className="text-xs text-slate-500">{commentsEmptyLabel}</p>
                             ) : (
                                 comments.map((comment) => {
+
                                     const author = comment.authorName ?? comment.userId;
+                                    console.log("test tesat", comment)
                                     const displayTime = comment.createdAt ? formatDateTime(comment.createdAt) : undefined;
                                     return (
                                         <div
@@ -1006,6 +1198,11 @@ const ModalDetailTask = ({
                                 })
                             )}
                         </div>
+                        {typingMessage && (
+                            <p className="mt-3 text-xs font-medium text-primary-600">
+                                {typingMessage}
+                            </p>
+                        )}
                         <form className="mt-4 space-y-2" onSubmit={handleSubmitComment}>
                             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 {resolveLabel('project.add_comment', 'เพิ่มความคิดเห็น')}
@@ -1013,7 +1210,8 @@ const ModalDetailTask = ({
                             <textarea
                                 rows={3}
                                 value={newCommentMessage}
-                                onChange={(event) => setNewCommentMessage(event.target.value)}
+                                onChange={handleCommentInputChange}
+                                onBlur={handleCommentInputBlur}
                                 placeholder={commentsPlaceholder}
                                 className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                                 disabled={isSubmittingComment}

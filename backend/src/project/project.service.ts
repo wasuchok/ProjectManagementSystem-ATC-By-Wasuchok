@@ -780,6 +780,11 @@ export class ProjectService {
 
     const formatted = this.formatTaskComment(created);
 
+    this.eventsGateway.broadcastToTask(task_id, 'project:task:comment:created', {
+      taskId: task_id,
+      comment: formatted,
+    });
+
     if (task.project_id != null) {
       this.eventsGateway.broadcastToProject(
         task.project_id,

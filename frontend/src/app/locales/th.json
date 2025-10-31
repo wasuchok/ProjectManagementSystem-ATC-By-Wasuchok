@@ -107,7 +107,11 @@
         "comment_placeholder": "พิมพ์ความคิดเห็นของคุณ...",
         "comment_submit": "ส่งความคิดเห็น",
         "comment_submitting": "กำลังส่ง...",
-        "add_comment": "เพิ่มความคิดเห็น"
+        "add_comment": "เพิ่มความคิดเห็น",
+        "typing_single_suffix": "กำลังพิมพ์...",
+        "typing_plural_suffix": "กำลังพิมพ์...",
+        "typing_more_suffix": "และอีก {count} คนกำลังพิมพ์...",
+        "typing_connector": "และ"
     },
     "table": {
         "showing_page": "หน้าที่",
