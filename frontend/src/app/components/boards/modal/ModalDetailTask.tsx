@@ -46,6 +46,12 @@ type TaskComment = {
     authorRole?: string;
 };
 
+type TaskStatusOption = {
+    id: string;
+    title: string;
+    color?: string;
+};
+
 const normalizeComment = (comment: any): any => ({
     id: String(comment.id),
     taskId: comment.task_id != null ? String(comment.task_id) : comment.taskId ?? undefined,
@@ -101,7 +107,7 @@ const normalizeSubtask = (subtask: any): SubtaskSummary => ({
     title: subtask.title ?? "",
     description: subtask.description ?? "",
     statusId: subtask.status_id != null ? String(subtask.status_id) : subtask.statusId ?? undefined,
-    statusLabel: subtask.tb_project_task_statuses?.name ?? subtask.statusLabel ?? undefined,
+    statusLabel: subtask.tb_project_task_statuses?.name ?? subtask.status_label ?? subtask.statusLabel ?? undefined,
     progressPercent: subtask.progress_percent != null ? String(subtask.progress_percent) : subtask.progressPercent ?? undefined,
     startDate: subtask.start_date ?? subtask.startDate ?? undefined,
     hasDueDate: subtask.has_due_date ?? subtask.hasDueDate ?? false,
@@ -148,7 +154,10 @@ type ModalDetailTaskProps = {
     getProgressAppearance: (value: number) => { gradient: string; glowColor: string };
     formatDateTime: (value?: string) => string;
     availableAssignees: AssigneeOption[];
+    statusOptions: TaskStatusOption[];
     onTaskProgressChanged?: (taskId: string, progressPercent: number) => void;
+    onSubtaskUpdated?: (taskId: string, subtask: SubtaskSummary) => void;
+    onSubtaskCreated?: (taskId: string, subtask: SubtaskSummary) => void;
 };
 
 const ModalDetailTask = ({
@@ -160,7 +169,10 @@ const ModalDetailTask = ({
     getProgressAppearance,
     formatDateTime,
     availableAssignees,
+    statusOptions,
     onTaskProgressChanged,
+    onSubtaskUpdated,
+    onSubtaskCreated,
 }: ModalDetailTaskProps) => {
     const { t } = useLanguage()
     const resolveLabel = (key: string, fallback: string) => {
@@ -211,11 +223,21 @@ const ModalDetailTask = ({
     const currentUserName = user?.full_name ?? user?.username ?? currentUserId ?? "";
     const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
     const [editProgressPercent, setEditProgressPercent] = useState<string>("0");
+    const [editStatusId, setEditStatusId] = useState<string | null>(null);
     const [isUpdatingSubtask, setIsUpdatingSubtask] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
     const lastEmittedProgressRef = useRef<number | null>(null);
     const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hasActiveTypingRef = useRef(false);
+
+    useEffect(() => {
+        if (!editingSubtaskId) return;
+        if (statusOptions.length === 0) return;
+        if (editStatusId && statusOptions.some((option) => option.id === editStatusId)) {
+            return;
+        }
+        setEditStatusId(statusOptions[0]?.id ?? null);
+    }, [statusOptions, editingSubtaskId, editStatusId]);
     const typingMessage = useMemo(() => {
         const entries = Object.values(typingUsers);
         if (entries.length === 0) return "";
@@ -547,7 +569,9 @@ const ModalDetailTask = ({
             const response = await apiPrivate.post(`/project/task/${selectedTask.id}/subtasks`, payload);
             const created = response.data?.data;
             if (created) {
-                setSubtasks((prev) => [...prev, normalizeSubtask(created)]);
+                const normalized = normalizeSubtask(created);
+                setSubtasks((prev) => [...prev, normalized]);
+                onSubtaskCreated?.(String(selectedTask.id), normalized);
                 lastEmittedProgressRef.current = null;
             }
 
@@ -585,6 +609,7 @@ const ModalDetailTask = ({
     const handleStartEdit = (subtask: SubtaskSummary) => {
         setEditingSubtaskId(subtask.id);
         setEditProgressPercent(String(getProgressValue(subtask.progressPercent)));
+        setEditStatusId(subtask.statusId ?? (statusOptions[0]?.id ?? null));
         setUpdateError(null);
     };
 
@@ -592,6 +617,7 @@ const ModalDetailTask = ({
         setEditingSubtaskId(null);
         setIsUpdatingSubtask(false);
         setUpdateError(null);
+        setEditStatusId(null);
     };
 
     const handleCommentInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -658,6 +684,9 @@ const ModalDetailTask = ({
         const payload: Record<string, any> = {
             progress_percent: Math.min(100, Math.max(0, progressNumber)),
         };
+        if (editStatusId != null && editStatusId !== "") {
+            payload.status_id = Number(editStatusId);
+        }
 
         setIsUpdatingSubtask(true);
         setUpdateError(null);
@@ -675,9 +704,11 @@ const ModalDetailTask = ({
                         subtask.id === normalized.id ? normalized : subtask
                     )
                 );
+                onSubtaskUpdated?.(String(selectedTask.id), normalized);
                 lastEmittedProgressRef.current = null;
             }
             setEditingSubtaskId(null);
+            setEditStatusId(null);
             setUpdateError(null);
         } catch (error: any) {
             console.error("Failed to update subtask", error);
@@ -1087,24 +1118,47 @@ const ModalDetailTask = ({
                                                 <div className="mt-3 rounded-lg border border-slate-200 bg-white/80 p-3">
                                                     {isEditing ? (
                                                         <form className="space-y-3 text-[11px]" onSubmit={handleUpdateSubtask}>
-                                                            <div className="space-y-1">
-                                                                <label className="font-semibold text-slate-500 uppercase tracking-wide">
-                                                                    {t('project.update_progress')}
-                                                                </label>
-                                                                <input
-                                                                    type="range"
-                                                                    min={0}
-                                                                    max={100}
-                                                                    step={5}
-                                                                    value={editProgressPercent}
-                                                                    onChange={(event) =>
-                                                                        setEditProgressPercent(event.target.value)
-                                                                    }
-                                                                    className="w-full accent-primary-500"
-                                                                />
-                                                                <p className="text-right font-semibold text-slate-600">
-                                                                    {editProgressPercent}%
-                                                                </p>
+                                                            <div className="space-y-3">
+                                                                <div className="space-y-1">
+                                                                    <label className="font-semibold text-slate-500 uppercase tracking-wide">
+                                                                        {t('project.update_progress')}
+                                                                    </label>
+                                                                    <input
+                                                                        type="range"
+                                                                        min={0}
+                                                                        max={100}
+                                                                        step={5}
+                                                                        value={editProgressPercent}
+                                                                        onChange={(event) =>
+                                                                            setEditProgressPercent(event.target.value)
+                                                                        }
+                                                                        className="w-full accent-primary-500"
+                                                                    />
+                                                                    <p className="text-right font-semibold text-slate-600">
+                                                                        {editProgressPercent}%
+                                                                    </p>
+                                                                </div>
+                                                                {statusOptions.length > 0 && (
+                                                                    <div className="space-y-1">
+                                                                        <label className="font-semibold uppercase tracking-wide text-slate-500">
+                                                                            {t('project.table_status')}
+                                                                        </label>
+                                                                        <select
+                                                                            value={editStatusId ?? ""}
+                                                                            onChange={(event) => {
+                                                                                const value = event.target.value;
+                                                                                setEditStatusId(value ? value : null);
+                                                                            }}
+                                                                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 transition focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                                                                        >
+                                                                            {statusOptions.map((option) => (
+                                                                                <option key={option.id} value={option.id}>
+                                                                                    {option.title}
+                                                                                </option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             {updateError && (
                                                                 <p className="font-semibold text-rose-500">{updateError}</p>

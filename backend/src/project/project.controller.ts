@@ -116,6 +116,12 @@ export class ProjectController {
     return this.projectService.getTaskProject(Number(project_id));
   }
 
+  @Get('/task/logs/:project_id')
+  @Roles('admin', 'staff', 'employee')
+  async getTaskLogs(@Param('project_id') project_id: string) {
+    return this.projectService.getTaskLogs(Number(project_id));
+  }
+
   @Get('/task/:task_id/subtasks')
   @Roles('admin', 'staff', 'employee')
   async getSubtasks(@Param('task_id') task_id: string) {

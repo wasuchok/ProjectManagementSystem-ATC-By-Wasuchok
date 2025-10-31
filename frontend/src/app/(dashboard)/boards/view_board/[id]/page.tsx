@@ -17,7 +17,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "re
 import {
     FaPlus
 } from "react-icons/fa";
-import { FiChevronRight } from "react-icons/fi";
+import { FiChevronRight, FiClock, FiRefreshCw } from "react-icons/fi";
 import type { Socket } from "socket.io-client";
 
 type SubtaskAssignee = {
@@ -80,6 +80,28 @@ type TaskMovedEvent = {
     task: any;
 };
 
+type TaskLogStatus = {
+    id?: string | null;
+    name?: string | null;
+    color?: string | null;
+};
+
+type TaskLogEntry = {
+    id: string;
+    taskId: string;
+    taskTitle?: string | null;
+    subtaskId?: string | null;
+    subtaskTitle?: string | null;
+    changedBy?: string | null;
+    changedByName?: string | null;
+    changedByDepartment?: string | null;
+    oldStatus?: TaskLogStatus | null;
+    newStatus?: TaskLogStatus | null;
+    oldProgress?: number | null;
+    newProgress?: number | null;
+    createdAt?: string | null;
+};
+
 export default function KanbanBoard() {
     const { t } = useLanguage();
     const { id } = useParams();
@@ -88,7 +110,20 @@ export default function KanbanBoard() {
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+    const [activeTab, setActiveTab] = useState<"board" | "logs">("board");
+    const [taskLogs, setTaskLogs] = useState<TaskLogEntry[]>([]);
+    const [isLoadingTaskLogs, setIsLoadingTaskLogs] = useState(false);
+    const [taskLogsError, setTaskLogsError] = useState<string | null>(null);
     const socketRef = useRef<Socket | null>(null);
+    const statusOptions = useMemo(
+        () =>
+            boards.map((board) => ({
+                id: board.id,
+                title: board.title,
+                color: board.color,
+            })),
+        [boards]
+    );
 
     const projectId = useMemo(() => {
         if (!id) return null;
@@ -122,6 +157,61 @@ export default function KanbanBoard() {
         );
     }, []);
 
+    const handleSubtaskUpsert = useCallback((taskId: string, subtask: Subtask) => {
+        const boardMatch = subtask.statusId
+            ? boards.find((board) => board.id === subtask.statusId)
+            : undefined;
+        const enhancedSubtask: Subtask = {
+            ...subtask,
+            statusLabel: subtask.statusLabel ?? boardMatch?.title ?? subtask.statusLabel,
+        };
+        setBoards((prevBoards) =>
+            prevBoards.map((board) => ({
+                ...board,
+                tasks: board.tasks.map((task) => {
+                    if (task.id !== taskId) {
+                        return task;
+                    }
+                    const existingSubtasks = Array.isArray(task.subtasks) ? [...task.subtasks] : [];
+                    const index = existingSubtasks.findIndex((item) => item.id === enhancedSubtask.id);
+                    if (index >= 0) {
+                        existingSubtasks[index] = {
+                            ...existingSubtasks[index],
+                            ...enhancedSubtask,
+                        };
+                    } else {
+                        existingSubtasks.push(enhancedSubtask);
+                    }
+                    return {
+                        ...task,
+                        subtasks: existingSubtasks,
+                    };
+                }),
+            }))
+        );
+
+        setSelectedTask((prev) => {
+            if (!prev || prev.id !== taskId) {
+                return prev;
+            }
+            const existingSubtasks = Array.isArray(prev.subtasks) ? [...prev.subtasks] : [];
+            const index = existingSubtasks.findIndex((item) => item.id === enhancedSubtask.id);
+            if (index >= 0) {
+                existingSubtasks[index] = {
+                    ...existingSubtasks[index],
+                    ...enhancedSubtask,
+                };
+            } else {
+                existingSubtasks.push(enhancedSubtask);
+            }
+
+            return {
+                ...prev,
+                subtasks: existingSubtasks,
+            };
+        });
+    }, [boards]);
+
     const priorityConfig: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
         low: {
             label: "Low",
@@ -151,7 +241,7 @@ export default function KanbanBoard() {
             title: subtask.title ?? "",
             description: subtask.description ?? "",
             statusId: subtask.status_id != null ? String(subtask.status_id) : subtask.statusId ?? undefined,
-            statusLabel: subtask.tb_project_task_statuses?.name ?? subtask.statusLabel ?? undefined,
+            statusLabel: subtask.tb_project_task_statuses?.name ?? subtask.status_label ?? subtask.statusLabel ?? undefined,
             progressPercent: subtask.progress_percent != null ? String(subtask.progress_percent) : subtask.progressPercent ?? undefined,
             startDate: subtask.start_date ?? subtask.startDate ?? undefined,
             hasDueDate: subtask.has_due_date ?? subtask.hasDueDate ?? false,
@@ -192,6 +282,112 @@ export default function KanbanBoard() {
         }),
         [normalizeSubtaskData]
     );
+
+    const normalizeTaskLog = useCallback((log: any): TaskLogEntry => {
+        const toStatus = (status: any): TaskLogStatus | null => {
+            if (!status) return null;
+            const statusId =
+                status.id != null
+                    ? String(status.id)
+                    : status.status_id != null
+                        ? String(status.status_id)
+                        : status.statusId != null
+                            ? String(status.statusId)
+                            : undefined;
+            return {
+                id: statusId ?? null,
+                name: status.name ?? status.statusName ?? null,
+                color: status.color ?? status.statusColor ?? null,
+            };
+        };
+
+        let createdAt: string | null = null;
+        if (typeof log?.createdAt === "string") {
+            createdAt = log.createdAt;
+        } else if (log?.created_at instanceof Date) {
+            createdAt = log.created_at.toISOString();
+        } else if (typeof log?.created_at === "string") {
+            createdAt = log.created_at;
+        }
+
+        const oldStatus =
+            log?.oldStatus != null
+                ? toStatus(log.oldStatus)
+                : log?.old_status_id != null
+                    ? {
+                        id: String(log.old_status_id),
+                        name: log.old_status_name ?? null,
+                        color: log.old_status_color ?? null,
+                    }
+                    : null;
+
+        const newStatus =
+            log?.newStatus != null
+                ? toStatus(log.newStatus)
+                : log?.new_status_id != null
+                    ? {
+                        id: String(log.new_status_id),
+                        name: log.new_status_name ?? null,
+                        color: log.new_status_color ?? null,
+                    }
+                    : null;
+
+        const resolveProgress = (value: any): number | null => {
+            if (typeof value === "number") {
+                return value;
+            }
+            if (value != null) {
+                const numeric = Number(value);
+                return Number.isNaN(numeric) ? null : numeric;
+            }
+            return null;
+        };
+
+        const taskId =
+            log?.taskId != null
+                ? String(log.taskId)
+                : log?.task_id != null
+                    ? String(log.task_id)
+                    : "";
+
+        const subtaskId =
+            log?.subtaskId != null
+                ? String(log.subtaskId)
+                : log?.subtask_id != null
+                    ? String(log.subtask_id)
+                    : null;
+
+        return {
+            id: String(log?.id ?? ""),
+            taskId,
+            taskTitle:
+                log?.taskTitle ??
+                log?.task_title ??
+                log?.tb_project_tasks?.title ??
+                null,
+            subtaskId,
+            subtaskTitle:
+                log?.subtaskTitle ??
+                log?.subtask_title ??
+                log?.tb_project_sub_tasks?.title ??
+                null,
+            changedBy: log?.changedBy ?? log?.changed_by ?? null,
+            changedByName:
+                log?.changedByName ??
+                log?.user_account?.full_name ??
+                log?.user_account?.username ??
+                null,
+            changedByDepartment:
+                log?.changedByDepartment ?? log?.user_account?.department ?? null,
+            oldStatus,
+            newStatus,
+            oldProgress:
+                resolveProgress(log?.oldProgress) ?? resolveProgress(log?.old_progress),
+            newProgress:
+                resolveProgress(log?.newProgress) ?? resolveProgress(log?.new_progress),
+            createdAt,
+        };
+    }, []);
 
     const updateBoardsWithTask = useCallback((normalizedTask: Task, previousStatusId?: string | null) => {
         const destinationBoardId = normalizedTask.statusId ? String(normalizedTask.statusId) : null;
@@ -361,10 +557,40 @@ export default function KanbanBoard() {
         }
     }
 
+    const fetchTaskLogs = useCallback(async () => {
+        if (!projectId) {
+            setTaskLogs([]);
+            setIsLoadingTaskLogs(false);
+            return;
+        }
+
+        setIsLoadingTaskLogs(true);
+        setTaskLogsError(null);
+
+        try {
+            const response = await apiPrivate.get(`/project/task/logs/${projectId}`);
+            if (response.status === 200 || response.status === 201) {
+                const logs = Array.isArray(response.data?.data)
+                    ? response.data.data.map((log: any) => normalizeTaskLog(log))
+                    : [];
+                setTaskLogs(logs);
+            } else {
+                setTaskLogs([]);
+                setTaskLogsError(t('project.task_logs_error'));
+            }
+        } catch (error) {
+            console.log(error);
+            setTaskLogsError(t('project.task_logs_error'));
+        } finally {
+            setIsLoadingTaskLogs(false);
+        }
+    }, [projectId, normalizeTaskLog, t]);
+
     useEffect(() => {
         fetchAllStatusTask();
         fetchProjectMembers();
-    }, [projectId, normalizeTaskData]);
+        fetchTaskLogs();
+    }, [projectId, normalizeTaskData, fetchTaskLogs]);
 
     useEffect(() => {
         if (!projectId) return;
@@ -388,6 +614,12 @@ export default function KanbanBoard() {
             socket.off("project:task:moved", handleTaskMoved);
         };
     }, [projectId, normalizeTaskData, updateBoardsWithTask]);
+
+    useEffect(() => {
+        if (activeTab === "logs") {
+            fetchTaskLogs();
+        }
+    }, [activeTab, fetchTaskLogs]);
 
 
     const handleDragEnd = async (result: DropResult) => {
@@ -415,7 +647,13 @@ export default function KanbanBoard() {
         const [movedTask] = sourceBoard.tasks.splice(source.index, 1);
         if (!movedTask) return;
 
-        destBoard.tasks.splice(destination.index, 0, movedTask);
+        const movedTaskWithStatus: Task = {
+            ...movedTask,
+            statusId: destBoard.id,
+            statusLabel: destBoard.title,
+        };
+
+        destBoard.tasks.splice(destination.index, 0, movedTaskWithStatus);
 
         setBoards(updatedBoards);
 
@@ -479,7 +717,43 @@ export default function KanbanBoard() {
                 }
             `}</style>
             <div className="relative min-h-[82vh] rounded-3xl border border-slate-100 bg-slate-50/80 p-6">
-                <DragDropContext onDragEnd={handleDragEnd}>
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/90 p-1 shadow-sm">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("board")}
+                            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition focus:outline-none ${activeTab === "board"
+                                ? "bg-primary-600 text-white shadow"
+                                : "text-slate-500 hover:text-primary-500"
+                                }`}
+                        >
+                            {t('project.board_tab')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("logs")}
+                            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition focus:outline-none ${activeTab === "logs"
+                                ? "bg-primary-600 text-white shadow"
+                                : "text-slate-500 hover:text-primary-500"
+                                }`}
+                        >
+                            {t('project.task_logs_tab')}
+                        </button>
+                    </div>
+                    {activeTab === "logs" && (
+                        <button
+                            type="button"
+                            onClick={() => fetchTaskLogs()}
+                            className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-200 disabled:cursor-not-allowed disabled:opacity-70"
+                            disabled={isLoadingTaskLogs}
+                        >
+                            <FiRefreshCw className={isLoadingTaskLogs ? "animate-spin" : ""} size={14} />
+                            {t('project.task_logs_refresh')}
+                        </button>
+                    )}
+                </div>
+                {activeTab === "board" ? (
+                    <DragDropContext onDragEnd={handleDragEnd}>
                     <div className="flex gap-6 overflow-x-auto pb-4">
                         {boards.map((board) => {
                             const tasks = board.tasks ?? [];
@@ -641,9 +915,132 @@ export default function KanbanBoard() {
                         })}
                     </div>
                 </DragDropContext>
+                ) : (
+                    <div className="flex flex-col gap-4">
+                        <h2 className="text-base font-semibold text-slate-700">{t('project.task_logs_heading')}</h2>
+                        <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.4)]">
+                            {isLoadingTaskLogs ? (
+                                <p className="text-sm text-slate-500">{t('project.task_logs_loading')}</p>
+                            ) : taskLogsError ? (
+                                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-600">
+                                    {taskLogsError}
+                                </div>
+                            ) : taskLogs.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                                    {t('project.task_logs_empty')}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {taskLogs.map((log) => {
+                                        const actorName = log.changedByName ?? log.changedBy ?? t('project.task_logs_unknown_user');
+                                        const timestamp = log.createdAt ? formatDateTime(log.createdAt) : null;
+                                        const statusInfo = (status: TaskLogStatus | null | undefined) => ({
+                                            label: status?.name ?? t('project.task_logs_status_unknown'),
+                                            color: status?.color ?? "#94a3b8",
+                                        });
+                                        const oldStatusInfo = statusInfo(log.oldStatus);
+                                        const newStatusInfo = statusInfo(log.newStatus);
+                                        const showStatus = Boolean(log.oldStatus || log.newStatus);
+                                        const showProgress =
+                                            log.oldProgress != null &&
+                                            log.newProgress != null &&
+                                            Number(log.oldProgress) !== Number(log.newProgress);
 
+                                        return (
+                                            <div
+                                                key={log.id}
+                                                className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.35)]"
+                                            >
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-800">
+                                                            {log.taskTitle ?? t('project.task_logs_untitled_task')}
+                                                        </p>
+                                                        <p className="text-xs text-slate-400">#{log.taskId}</p>
+                                                    </div>
+                                                    {log.subtaskTitle && (
+                                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                                                            {t('project.task_logs_subtask')}
+                                                            <span className="font-semibold text-slate-600">{log.subtaskTitle}</span>
+                                                        </span>
+                                                    )}
+                                                    {timestamp && (
+                                                        <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-slate-400">
+                                                            <FiClock size={12} />
+                                                            {timestamp}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-2 text-xs">
+                                                    <div className="flex flex-wrap items-center gap-2 text-slate-500">
+                                                        <span className="font-semibold text-slate-600">
+                                                            {t('project.task_logs_changed_by_label')}
+                                                        </span>
+                                                        <span className="text-slate-700">
+                                                            {actorName}
+                                                            {log.changedByDepartment ? ` • ${log.changedByDepartment}` : ""}
+                                                        </span>
+                                                    </div>
+                                                    {showStatus && (
+                                                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                                                {t('project.task_logs_status')}
+                                                            </span>
+                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
+                                                                <span
+                                                                    className="h-2 w-2 rounded-full"
+                                                                    style={{ backgroundColor: oldStatusInfo.color ?? "#94a3b8" }}
+                                                                />
+                                                                {oldStatusInfo.label}
+                                                            </span>
+                                                            <FiChevronRight className="text-slate-300" size={12} />
+                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
+                                                                <span
+                                                                    className="h-2 w-2 rounded-full"
+                                                                    style={{ backgroundColor: newStatusInfo.color ?? "#94a3b8" }}
+                                                                />
+                                                                {newStatusInfo.label}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    {showProgress && (
+                                                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                                                {t('project.task_logs_progress')}
+                                                            </span>
+                                                            <span className="font-semibold text-slate-600">
+                                                                {Math.round(Number(log.oldProgress ?? 0))}%
+                                                            </span>
+                                                            <FiChevronRight className="text-slate-300" size={12} />
+                                                            <span className="font-semibold text-slate-600">
+                                                                {Math.round(Number(log.newProgress ?? 0))}%
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
                 {selectedTask && (
-                    <ModalDetailTask isTaskModalOpen={isTaskModalOpen} handleCloseTaskModal={handleCloseTaskModal} selectedTask={selectedTask} priorityConfig={priorityConfig} getProgressValue={getProgressValue} getProgressAppearance={getProgressAppearance} formatDateTime={formatDateTime} availableAssignees={projectMembers} onTaskProgressChanged={handleTaskProgressChanged} />
+                    <ModalDetailTask
+                        isTaskModalOpen={isTaskModalOpen}
+                        handleCloseTaskModal={handleCloseTaskModal}
+                        selectedTask={selectedTask}
+                        priorityConfig={priorityConfig}
+                        getProgressValue={getProgressValue}
+                        getProgressAppearance={getProgressAppearance}
+                        formatDateTime={formatDateTime}
+                        availableAssignees={projectMembers}
+                        statusOptions={statusOptions}
+                        onSubtaskUpdated={handleSubtaskUpsert}
+                        onSubtaskCreated={handleSubtaskUpsert}
+                        onTaskProgressChanged={handleTaskProgressChanged}
+                    />
                 )}
 
                 {openModalIsDefault && (

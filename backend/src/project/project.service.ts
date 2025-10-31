@@ -78,6 +78,21 @@ export class ProjectService {
     };
   }
 
+  private formatSubtask(subtask: any) {
+    if (!subtask) return null;
+    return {
+      ...subtask,
+      status_id:
+        subtask.status_id != null
+          ? Number(subtask.status_id)
+          : subtask.statusId != null
+            ? Number(subtask.statusId)
+            : null,
+      status_label: subtask.tb_project_task_statuses?.name ?? null,
+      status_color: subtask.tb_project_task_statuses?.color ?? null,
+    };
+  }
+
   async createProject(createProjectDto: CreateProjectDto) {
     const {
       name,
@@ -432,6 +447,111 @@ export class ProjectService {
     return new ApiResponse('เรียกดูข้อมูลหัวข้องานสำเร็จ', 200, lists);
   }
 
+  async getTaskLogs(project_id: number) {
+    if (!project_id) {
+      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+    }
+
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      select: { id: true },
+    });
+
+    if (!project) {
+      return new ApiResponse('ไม่พบโปรเจกต์ที่ต้องการ', 404, null);
+    }
+
+    const logs = await this.prisma.tb_project_task_logs.findMany({
+      where: {
+        tb_project_tasks: {
+          project_id,
+        },
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+      include: {
+        user_account: true,
+        tb_project_tasks: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        tb_project_sub_tasks: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+    });
+
+    const statusIds = Array.from(
+      new Set(
+        logs.flatMap((log) => [
+          Number(log.old_status_id),
+          Number(log.new_status_id),
+        ]),
+      ),
+    ).filter((value) => !Number.isNaN(value));
+
+    const statuses =
+      statusIds.length > 0
+        ? await this.prisma.tb_project_task_statuses.findMany({
+            where: {
+              id: {
+                in: statusIds,
+              },
+            },
+            select: {
+              id: true,
+              name: true,
+              color: true,
+            },
+          })
+        : [];
+
+    const statusMap = new Map<
+      number,
+      { id: number; name: string | null; color: string | null }
+    >();
+
+    statuses.forEach((status) =>
+      statusMap.set(Number(status.id), {
+        id: Number(status.id),
+        name: status.name ?? null,
+        color: status.color ?? null,
+      }),
+    );
+
+    const formatted = logs.map((log) => ({
+      id: log.id,
+      taskId: log.task_id,
+      taskTitle: log.tb_project_tasks?.title ?? null,
+      subtaskId: log.subtask_id ?? null,
+      subtaskTitle: log.tb_project_sub_tasks?.title ?? null,
+      changedBy: log.changed_by ?? null,
+      changedByName:
+        log.user_account?.full_name ??
+        log.user_account?.username ??
+        log.changed_by ??
+        null,
+      changedByDepartment: log.user_account?.department ?? null,
+      oldStatus: statusMap.get(Number(log.old_status_id)) ?? null,
+      newStatus: statusMap.get(Number(log.new_status_id)) ?? null,
+      oldProgress: Number(log.old_progress ?? 0),
+      newProgress: Number(log.new_progress ?? 0),
+      createdAt: log.created_at ? log.created_at.toISOString() : null,
+    }));
+
+    return new ApiResponse(
+      'ดึงประวัติการเปลี่ยนแปลงของงานสำเร็จ',
+      200,
+      formatted,
+    );
+  }
+
   async getProjectMembersForSubtasks(project_id: number) {
     const project = await this.prisma.tb_project_projects.findUnique({
       where: { id: project_id },
@@ -481,7 +601,11 @@ export class ProjectService {
       },
     });
 
-    return new ApiResponse('เรียกดูงานย่อยสำเร็จ', 200, subtasks);
+    return new ApiResponse(
+      'เรียกดูงานย่อยสำเร็จ',
+      200,
+      subtasks.map((subtask) => this.formatSubtask(subtask)),
+    );
   }
 
   private async recalculateTaskProgress(task_id: number) {
@@ -598,7 +722,11 @@ export class ProjectService {
       },
     });
 
-    return new ApiResponse('สร้างงานย่อยสำเร็จ', 201, subtaskWithRelations);
+    return new ApiResponse(
+      'สร้างงานย่อยสำเร็จ',
+      201,
+      this.formatSubtask(subtaskWithRelations),
+    );
   }
 
   async updateSubtask(
@@ -633,6 +761,15 @@ export class ProjectService {
       return new ApiResponse('คุณไม่มีสิทธิ์อัปเดตงานย่อยนี้', 403, null);
     }
 
+    const task = await this.prisma.tb_project_tasks.findUnique({
+      where: { id: task_id },
+      select: { id: true, project_id: true },
+    });
+
+    if (!task) {
+      return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
     // ✅ เก็บค่าเก่าก่อนอัปเดต
     const oldStatusId = subtask.status_id ?? 0;
     const oldProgress = Number(subtask.progress_percent ?? 0);
@@ -649,6 +786,28 @@ export class ProjectService {
           100,
           Math.max(0, progressNumber),
         );
+        if (data.status_id == null) {
+          const statuses =
+            await this.prisma.tb_project_task_statuses.findMany({
+              where: { project_id: task.project_id },
+              orderBy: {
+                order_index: 'asc',
+              },
+            });
+          if (statuses.length > 0) {
+            const sorted = statuses.sort(
+              (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
+            );
+            const span = sorted.length - 1;
+            const normalized = Math.min(
+              1,
+              Math.max(0, Number(updateData.progress_percent) / 100),
+            );
+            const targetIndex =
+              span <= 0 ? 0 : Math.min(span, Math.floor(normalized * span));
+            updateData.status_id = sorted[targetIndex]?.id ?? updateData.status_id;
+          }
+        }
       }
     }
 
@@ -701,7 +860,11 @@ export class ProjectService {
       },
     });
 
-    return new ApiResponse('อัปเดตงานย่อยสำเร็จ', 200, subtaskWithRelations);
+    return new ApiResponse(
+      'อัปเดตงานย่อยสำเร็จ',
+      200,
+      this.formatSubtask(subtaskWithRelations),
+    );
   }
 
   async getTaskComments(task_id: number) {
