@@ -923,6 +923,76 @@ export class ProjectService {
     );
   }
 
+  async summarizeTaskComments(task_id: number) {
+    if (!task_id) {
+      return new ApiResponse('กรุณาระบุงาน', 400, null);
+    }
+
+    const task = await this.prisma.tb_project_tasks.findUnique({
+      where: { id: task_id },
+      select: { id: true },
+    });
+    if (!task) {
+      return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
+    const comments = await this.prisma.tb_project_task_comments.findMany({
+      where: { task_id },
+      orderBy: { created_at: 'asc' },
+      include: { user_account: true },
+    });
+
+    const plain = comments.map((c) => {
+      const who = c.user_account?.full_name || c.user_account?.username || 'unknown';
+      const when = c.created_at?.toISOString?.() ?? '';
+      return `- (${when}) ${who}: ${c.message}`;
+    }).join('\n');
+
+    const systemPrompt = 'คุณคือผู้ช่วยที่สรุปข้อมูลให้สั้น กระชับ เป็นข้อ ๆ ภาษาไทย เน้นประเด็นสำคัญ การตัดสินใจ งานค้าง และกำหนดเวลา';
+    const userPrompt = `สรุปคอมเมนต์ของงานต่อไปนี้แบบ bullet point 3-8 ข้อ พร้อมสรุปสถานะโดยรวมถ้ามี:\n\n${plain}`;
+
+    let summary = '';
+    const apiKey = process.env.OPENAI_API_KEY;
+    try {
+      if (apiKey) {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.2,
+            max_tokens: 300,
+          }),
+        });
+        const json = await res.json();
+        summary = json?.choices?.[0]?.message?.content ?? '';
+      }
+    } catch (e) {
+      // fall back summarization below
+    }
+
+    if (!summary) {
+      // Fallback: naive summary (no external AI)
+      const last = comments.slice(-5).map((c) => c.message).filter(Boolean);
+      summary = last.length
+        ? `สรุปโดยย่อ (fallback):\n- ล่าสุด: ${last.join('\n- ')}`
+        : 'ยังไม่มีคอมเมนต์ให้สรุป';
+    }
+
+    return new ApiResponse('สรุปคอมเมนต์สำเร็จ', 200, {
+      task_id,
+      count: comments.length,
+      summary,
+    });
+  }
+
   async createTaskComment(
     task_id: number,
     userId: string,

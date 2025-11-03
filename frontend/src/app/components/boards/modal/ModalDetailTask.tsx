@@ -3,7 +3,7 @@ import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { getSocket } from "@/app/utils/socket";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiMessageCircle, FiPlus, FiUser } from "react-icons/fi";
+import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiMessageCircle, FiPlus, FiUser, FiRefreshCw } from "react-icons/fi";
 import MinimalModal from "../../MinimalModal";
 
 type AssigneeOption = {
@@ -205,6 +205,9 @@ const ModalDetailTask = ({
     const [comments, setComments] = useState<TaskComment[]>([]);
     const [isLoadingComments, setIsLoadingComments] = useState(false);
     const [commentsError, setCommentsError] = useState<string | null>(null);
+    const [summaryText, setSummaryText] = useState<string | null>(null);
+    const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
     const [typingUsers, setTypingUsers] = useState<Record<string, { name: string; expiresAt: number }>>({});
     const [commentSubmitError, setCommentSubmitError] = useState<string | null>(null);
     const [newCommentMessage, setNewCommentMessage] = useState('');
@@ -313,6 +316,26 @@ const ModalDetailTask = ({
 
         return () => controller.abort();
     }, [isTaskModalOpen, selectedTask?.id, commentsErrorLabel]);
+
+    const handleSummarizeComments = useCallback(async () => {
+        if (!selectedTask?.id) return;
+        setIsLoadingSummary(true);
+        setSummaryError(null);
+        setSummaryText(null);
+        try {
+            const response = await apiPrivate.get(`/project/task/${selectedTask.id}/comments/summary`);
+            if (response.status === 200 || response.status === 201) {
+                const text = response.data?.data?.summary || '';
+                setSummaryText(text);
+            } else {
+                setSummaryError('ไม่สามารถสรุปคอมเมนต์ได้');
+            }
+        } catch (e) {
+            setSummaryError('ไม่สามารถสรุปคอมเมนต์ได้');
+        } finally {
+            setIsLoadingSummary(false);
+        }
+    }, [selectedTask?.id]);
 
     const emitTypingStart = useCallback(() => {
         if (!selectedTask?.id || !currentUserId) return;
@@ -1201,10 +1224,28 @@ const ModalDetailTask = ({
                     </div>
 
                     <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                        <div className="mb-4 flex flex-col gap-1">
+                        <div className="mb-4 flex flex-col gap-2">
                             <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold uppercase tracking-wide">
                                 <FiMessageCircle size={14} />
                                 {commentSectionTitle}
+                            </div>
+                            <div className="flex items-start gap-3">
+                                {summaryText ? (
+                                    <div className="flex-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 whitespace-pre-line">
+                                        {summaryText}
+                                    </div>
+                                ) : summaryError ? (
+                                    <div className="flex-1 text-xs font-semibold text-rose-500">{summaryError}</div>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={handleSummarizeComments}
+                                    disabled={isLoadingSummary}
+                                    className="ml-auto inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                                >
+                                    <FiRefreshCw className={isLoadingSummary ? 'animate-spin' : ''} size={12} />
+                                    {isLoadingSummary ? 'กำลังสรุป...' : 'สรุปคอมเมนต์'}
+                                </button>
                             </div>
                         </div>
                         <div className="max-h-60 space-y-3 overflow-y-auto pr-1">
