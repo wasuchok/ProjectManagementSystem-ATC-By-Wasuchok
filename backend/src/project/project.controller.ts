@@ -238,4 +238,10 @@ export class ProjectController {
   async summarizeTaskComments(@Param('task_id') task_id: string) {
     return this.projectService.summarizeTaskComments(Number(task_id));
   }
+
+  @Get('/:project_id/auto-assign')
+  @Roles('admin', 'staff', 'employee')
+  async getAutoAssign(@Param('project_id') project_id: string) {
+    return this.projectService.getAutoAssignSuggestions(Number(project_id));
+  }
 }

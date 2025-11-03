@@ -1,16 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma, tb_project_members_status } from 'generated/prisma';
 import { ApiResponse } from 'src/common/dto/api-response.dto';
 import { EventsGateway } from 'src/event/events.gateway';
 import { PrismaService } from 'src/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { Prisma, tb_project_members_status } from 'generated/prisma';
 
 @Injectable()
 export class ProjectService {
   constructor(
     private prisma: PrismaService,
     private eventsGateway: EventsGateway,
-  ) {}
+  ) { }
   private generateJoinCode(length = 6): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -499,17 +499,17 @@ export class ProjectService {
     const statuses =
       statusIds.length > 0
         ? await this.prisma.tb_project_task_statuses.findMany({
-            where: {
-              id: {
-                in: statusIds,
-              },
+          where: {
+            id: {
+              in: statusIds,
             },
-            select: {
-              id: true,
-              name: true,
-              color: true,
-            },
-          })
+          },
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        })
         : [];
 
     const statusMap = new Map<
@@ -677,8 +677,8 @@ export class ProjectService {
 
     const assigneeIds: string[] = Array.isArray(data.assignee_user_ids)
       ? data.assignee_user_ids
-          .map((value: any) => String(value).trim())
-          .filter((value: string) => value.length > 0)
+        .map((value: any) => String(value).trim())
+        .filter((value: string) => value.length > 0)
       : typeof data.assignee_user_id === 'string'
         ? [data.assignee_user_id.trim()]
         : [];
@@ -1116,5 +1116,61 @@ export class ProjectService {
     );
 
     return new ApiResponse('อัปเดตสถานะงานสำเร็จ', 200, updatedTask);
+  }
+
+  async getAutoAssignSuggestions(project_id: number) {
+    if (!project_id) {
+      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+    }
+
+    const members = await this.prisma.tb_project_members.findMany({
+      where: { project_id, status: tb_project_members_status.joined },
+      include: { user_account: true },
+    });
+
+    if (members.length === 0) {
+      return new ApiResponse('ไม่มีสมาชิกในโปรเจกต์', 200, []);
+    }
+
+    const now = new Date();
+    const tasks = await this.prisma.tb_project_tasks.findMany({
+      where: { project_id },
+      include: {
+        tb_project_sub_tasks: {
+          include: { tb_project_sub_task_assignees: true },
+        },
+      },
+    });
+
+    const stats = new Map<string, { userId: string; name: string; active: number; late: number; avgProgress: number; total: number }>();
+    members.forEach((m) => {
+      const name = m.user_account?.full_name || m.user_account?.username || m.user_id;
+      stats.set(m.user_id ?? '', { userId: m.user_id ?? '', name: name ?? '', active: 0, late: 0, avgProgress: 0, total: 0 });
+    });
+
+    tasks.forEach((task) => {
+      task.tb_project_sub_tasks.forEach((sub) => {
+        (sub.tb_project_sub_task_assignees || []).forEach((asg) => {
+          const s = stats.get(asg.user_id);
+          if (!s) return;
+          const progress = Number(sub.progress_percent ?? 0);
+          const hasDue = sub.has_due_date === true && sub.due_date != null;
+          const isLate = progress < 100 && hasDue && sub.due_date! < now;
+          s.active += progress >= 100 ? 0 : 1;
+          s.late += isLate ? 1 : 0;
+          s.avgProgress += progress;
+          s.total += 1;
+        });
+      });
+    });
+
+    const result = Array.from(stats.values()).map((s) => {
+      const avg = s.total > 0 ? s.avgProgress / s.total : 0;
+      const score = s.active + s.late * 2 + (1 - avg / 100); // lower is better
+      const reason = `งานค้าง ${s.active} • ช้า ${s.late} • เฉลี่ย ${Math.round(avg)}%`;
+      return { userId: s.userId, name: s.name, active: s.active, late: s.late, avgProgress: Math.round(avg), score, reason };
+    }).sort((a, b) => a.score - b.score);
+
+    return new ApiResponse('แนะนำผู้รับงานใหม่', 200, result);
   }
 }
