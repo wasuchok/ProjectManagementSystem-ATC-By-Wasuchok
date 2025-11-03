@@ -1678,7 +1678,7 @@ export default function KanbanBoard() {
                                 <div className="overflow-x-auto">
                                     <div className="min-w-[960px] rounded-xl border border-slate-200">
                                         <div className="grid grid-cols-[minmax(320px,360px)_1fr] border-b border-slate-200 bg-slate-50">
-                                            <div className="grid grid-cols-[2fr,0.9fr,1.1fr,1fr,1fr,1fr] items-center gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                            <div className="grid grid-cols-[2fr,0.9fr,1.1fr,1fr,1fr,1fr] items-center gap-3 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                                                 <span>{t('project.task_logs_subtask')}</span>
                                                 <span>%</span>
                                                 <span>{t('project.timeline_assignee')}</span>
@@ -1687,7 +1687,7 @@ export default function KanbanBoard() {
                                                 <span>{t('project.gantt_end_column')}</span>
                                             </div>
                                             <div
-                                                className="grid items-center border-l border-slate-200 text-center text-xs font-semibold uppercase tracking-wide text-slate-500"
+                                                className="grid items-center border-l border-slate-200 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-600"
                                                 style={{ gridTemplateColumns: `repeat(${ganttColumns.length}, minmax(96px, 1fr))` }}
                                             >
                                                 {ganttColumns.map((column) => (
@@ -1699,8 +1699,8 @@ export default function KanbanBoard() {
                                         </div>
                                         {ganttGroups.map((group, groupIndex) => (
                                             <div key={`group-${group.taskId}`}>
-                                                <div className="grid grid-cols-[minmax(320px,360px)_1fr] border-t border-slate-200 bg-slate-50/70">
-                                                    <div className="px-4 py-3 text-sm font-semibold text-slate-700">
+                                                <div className="grid grid-cols-[minmax(320px,360px)_1fr] border-t border-slate-200 bg-slate-50/80">
+                                                    <div className="px-4 py-2.5 text-[13px] font-semibold text-slate-700">
                                                         <span className="mr-2 text-slate-400">Task</span>
                                                         <span className="text-slate-800">{group.taskTitle}</span>
                                                         <span className="ml-2 text-xs font-semibold text-slate-400">#{group.taskId}</span>
@@ -1709,7 +1709,7 @@ export default function KanbanBoard() {
                                                 </div>
                                                 {group.items.map((item, index) => {
                                                     const isStriped = index % 2 === 1;
-                                                    const rowBackground = isStriped ? "bg-slate-50/45" : "bg-white";
+                                                    const rowBackground = isStriped ? "bg-slate-50" : "bg-white";
                                                     const totalMs = Math.max(1, ganttRange.end.getTime() - ganttRange.start.getTime());
                                                     const plannedDurationMs = Math.max(item.plannedEnd.getTime() - item.start.getTime(), MS_PER_DAY * 0.45);
                                                     const progressRatio = Math.min(1, Math.max(0, item.progress / 100));
@@ -1787,7 +1787,7 @@ export default function KanbanBoard() {
                                                                     </div>
                                                                 </div>
                                                                 <span className="truncate text-xs text-slate-600">{item.owner}</span>
-                                                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                                                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
                                                                     <span>{item.durationLabel}</span>
                                                                     {item.isLate && (
                                                                         <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-[2px] text-[10px] font-semibold text-rose-600">
@@ -1826,33 +1826,33 @@ export default function KanbanBoard() {
                                                                         );
                                                                     })}
                                                                 </div>
-                                                                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-slate-200/60" />
+                                                                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-slate-200/80" />
                                                                 <div
                                                                     className="absolute top-1/2 -translate-y-1/2 rounded-full"
                                                                     style={{
                                                                         left: `${planLeft}%`,
                                                                         width: `${planWidth}%`,
                                                                         minWidth: "48px",
-                                                                        height: "12px",
-                                                                        backgroundColor: "rgba(148,163,184,0.28)",
-                                                                        border: "1px dashed rgba(148,163,184,0.55)",
+                                                                        height: "10px",
+                                                                        backgroundColor: "rgba(148,163,184,0.25)",
+                                                                        border: "1px dashed rgba(148,163,184,0.6)",
                                                                         transition: "left 0.2s ease, width 0.2s ease",
                                                                     }}
                                                                     aria-hidden="true"
                                                                 />
                                                                 <div
-                                                                    className={`absolute top-1/2 flex h-8 -translate-y-1/2 items-center gap-2 overflow-hidden rounded-full px-3 text-xs font-semibold text-white shadow-sm ring-1 ring-slate-200/60 ${item.isLate ? "gantt-late-stripes" : ""}`}
+                                                                    className={`absolute top-1/2 flex h-7 -translate-y-1/2 items-center gap-2 overflow-hidden rounded-full px-2.5 text-[11px] font-semibold text-white shadow ring-1 ring-slate-200/70 ${item.isLate ? "gantt-late-stripes" : ""}`}
                                                                     style={{
                                                                         left: `${actualLeft}%`,
                                                                         width: `${actualWidth}%`,
-                                                                        minWidth: "72px",
-                                                                        background: `linear-gradient(90deg, ${actualColor} 0%, ${actualColor}cc 85%)`,
-                                                                        boxShadow: `0 10px 28px -14px ${actualColor}`,
+                                                                        minWidth: "68px",
+                                                                        background: `${actualColor}`,
+                                                                        boxShadow: `0 10px 24px -16px ${actualColor}`,
                                                                         transition: "left 0.2s ease, width 0.2s ease",
                                                                     }}
                                                                 >
                                                                     <span className="truncate">{item.subtaskTitle || item.taskTitle}</span>
-                                                                    <span className="rounded-full bg-white/90 px-2 py-[2px] text-[10px] font-semibold text-slate-600 shadow-sm">
+                                                                    <span className="rounded-full bg-white/95 px-2 py-[1px] text-[10px] font-semibold text-slate-700 shadow-sm">
                                                                         {progressText}
                                                                     </span>
                                                                     {/* end-cap marker for readability */}
