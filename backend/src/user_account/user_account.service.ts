@@ -218,9 +218,7 @@ export class UserAccountService {
   }
 
   async readUsers(query: any) {
-    const { page = 1, limit = 10, search = '', status } = query;
-
-    const skip = (page - 1) * limit;
+    const { page = 1, limit = 10, search = '', status, all } = query;
 
     const where: any = {
       AND: [
@@ -239,26 +237,54 @@ export class UserAccountService {
       ],
     };
 
-    const [users, total] = await this.prisma.$transaction([
-      this.prisma.user_account.findMany({
-        where,
-        skip: Number(skip),
-        take: Number(limit),
-        orderBy: { create_date: 'desc' },
-      }),
-      this.prisma.user_account.count({ where }),
-    ]);
+    let effectivePage: number;
+    let effectiveLimit: number;
+    let effectiveTotalPages: number;
+    let users: any[];
+    let total: number;
+
+    if (all === 'true') {
+      [users, total] = await this.prisma.$transaction([
+        this.prisma.user_account.findMany({
+          where,
+          orderBy: { create_date: 'desc' },
+        }),
+        this.prisma.user_account.count({ where }),
+      ]);
+      effectivePage = 1;
+      effectiveLimit = total;
+      effectiveTotalPages = 1;
+    } else {
+      const skip = (page - 1) * limit;
+      [users, total] = await this.prisma.$transaction([
+        this.prisma.user_account.findMany({
+          where,
+          skip: Number(skip),
+          take: Number(limit),
+          orderBy: { create_date: 'desc' },
+        }),
+        this.prisma.user_account.count({ where }),
+      ]);
+      effectivePage = Number(page);
+      effectiveLimit = Number(limit);
+      effectiveTotalPages = Math.ceil(total / Number(limit));
+    }
 
     const sanitizedUsers = users.map(
       ({ password_hash, refresh_token, ...rest }) => rest,
     );
 
-    return new ApiResponse('เรียกข้อมูลผู้ใช้ทั้งหมด', 200, {
-      total,
-      page: Number(page),
-      totalPages: Math.ceil(total / limit),
-      limit: Number(limit),
-      data: sanitizedUsers,
-    });
+    const responseData =
+      all === 'true'
+        ? sanitizedUsers
+        : {
+            total,
+            page: effectivePage,
+            totalPages: effectiveTotalPages,
+            limit: effectiveLimit,
+            data: sanitizedUsers,
+          };
+
+    return new ApiResponse('เรียกข้อมูลผู้ใช้ทั้งหมด', 200, responseData);
   }
 }

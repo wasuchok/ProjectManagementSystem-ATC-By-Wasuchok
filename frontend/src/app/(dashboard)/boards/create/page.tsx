@@ -41,7 +41,7 @@ const Page = () => {
 
     const fetchUsers = async () => {
         try {
-            const response = await apiPrivate.get("/user-account/users");
+            const response = await apiPrivate.get("/user-account/users?all=true");
             if (response.status === 200 || response.status === 201) {
                 const mapUsers = response.data.data.map((item: any) => ({
                     label: `${item.username} ${item.sect}`,
