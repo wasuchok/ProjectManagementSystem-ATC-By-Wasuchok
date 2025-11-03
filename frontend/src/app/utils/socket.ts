@@ -1,7 +1,8 @@
 
 import { io, Socket } from "socket.io-client";
+import { CONFIG } from "@/app/config";
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://10.17.3.244:5555";
+const SOCKET_URL = CONFIG.socketUrl;
 
 let socket: Socket | null = null;
 

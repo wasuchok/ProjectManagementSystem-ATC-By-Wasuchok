@@ -232,4 +232,10 @@ export class ProjectController {
   ) {
     return this.projectService.moveTask(Number(task_id), Number(body.status_id));
   }
+
+  @Get('/task/:task_id/comments/summary')
+  @Roles('admin', 'staff', 'employee')
+  async summarizeTaskComments(@Param('task_id') task_id: string) {
+    return this.projectService.summarizeTaskComments(Number(task_id));
+  }
 }

@@ -1,7 +1,8 @@
 
 import axios from "axios";
+import { CONFIG } from "@/app/config";
 
-const baseURL = "http://10.17.3.244:5555/api/v1";
+const baseURL = CONFIG.apiUrl;
 
 
 export const axiosInstance = axios.create({

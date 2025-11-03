@@ -1,7 +1,8 @@
 
 import Hashids from 'hashids';
 
-const salt = process.env.NEXT_PUBLIC_HASHIDS_SALT || 'your-secret-salt-here';
+import { CONFIG } from "@/app/config";
+const salt = CONFIG.hashidsSalt || 'your-secret-salt-here';
 const hashids = new Hashids(salt, 20);
 
 

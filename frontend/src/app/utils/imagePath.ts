@@ -1,4 +1,6 @@
 
+import { CONFIG } from "@/app/config";
+
 export function getImageUrl(rawPath?: string | null): string | null {
     if (!rawPath) return null;
 
@@ -10,7 +12,7 @@ export function getImageUrl(rawPath?: string | null): string | null {
 
 
     const baseUrl =
-        process.env.NEXT_PUBLIC_IMAGE_API || "http://localhost:33333/";
+        CONFIG.imageApi || "http://localhost:33333/";
 
 
     return `${baseUrl.replace(/\/$/, "")}/${normalizedPath.replace(/^\//, "")}`;
