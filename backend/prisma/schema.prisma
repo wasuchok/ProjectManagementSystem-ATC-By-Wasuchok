@@ -4,12 +4,12 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model user_account {
-  user_id                       String                          @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  user_id                       String                          @id @default(uuid()) @db.Uuid
   username                      String?                         @db.VarChar(50)
   password_hash                 String?                         @db.VarChar(255)
   full_name                     String?                         @db.VarChar(255)
@@ -20,9 +20,9 @@ model user_account {
   v_admin                       Int?                            @default(0)
   v_create                      Int?                            @default(0)
   status                        Int?                            @default(0)
-  create_date                   DateTime?                       @default(now()) @db.DateTime(0)
-  create_by                     String?                         @db.Char(36)
-  refresh_token                 String?                         @db.VarChar(255)
+  create_date                   DateTime?                       @default(now())
+  create_by                     String?                         @db.Uuid
+  refresh_token                 String?                         @db.Text
   sect                          String?                         @db.VarChar(10)
   tb_project_members            tb_project_members[]
   tb_project_projects           tb_project_projects[]
@@ -30,26 +30,26 @@ model user_account {
   tb_project_task_comments      tb_project_task_comments[]
   tb_project_task_logs          tb_project_task_logs[]
   tb_project_tasks              tb_project_tasks[]
-  user_account                  user_account?                   @relation("user_accountTouser_account", fields: [create_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_create_by")
+  user_account                  user_account?                   @relation("user_accountTouser_account", fields: [create_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
   other_user_account            user_account[]                  @relation("user_accountTouser_account")
 
-  @@index([create_by], map: "fk_create_by")
+  @@index([create_by])
 }
 
 model tb_project_members {
   id                  Int                        @id @default(autoincrement())
   project_id          Int?
-  user_id             String?                    @db.VarChar(255)
+  user_id             String?                    @db.Uuid
   status              tb_project_members_status? @default(invited)
-  invited_by          String                     @db.VarChar(255)
+  invited_by          String                     @db.Uuid
   is_active           Boolean?
-  joined_at           DateTime?                  @db.DateTime(0)
-  left_at             DateTime?                  @db.DateTime(0)
-  tb_project_projects tb_project_projects?       @relation(fields: [project_id], references: [id], onUpdate: SetNull, map: "fk_project_id")
-  user_account        user_account?              @relation(fields: [user_id], references: [user_id], onUpdate: SetNull, map: "fk_user_id")
+  joined_at           DateTime?
+  left_at             DateTime?
+  tb_project_projects tb_project_projects?       @relation(fields: [project_id], references: [id], onUpdate: SetNull)
+  user_account        user_account?              @relation(fields: [user_id], references: [user_id], onUpdate: SetNull)
 
-  @@index([project_id], map: "fk_project_id")
-  @@index([user_id], map: "fk_user_id")
+  @@index([project_id])
+  @@index([user_id])
 }
 
 model tb_project_projects {
@@ -61,16 +61,16 @@ model tb_project_projects {
   status                   tb_project_projects_status
   join_enabled             Boolean
   progress_percent         Decimal?                     @default(0.00) @db.Decimal(5, 2)
-  completed_date           DateTime?                    @db.DateTime(0)
-  created_by               String?                      @db.VarChar(255)
-  created_at               DateTime                     @default(now()) @db.DateTime(0)
-  updated_at               DateTime                     @default(now()) @db.DateTime(0)
+  completed_date           DateTime?
+  created_by               String?                      @db.Uuid
+  created_at               DateTime                     @default(now())
+  updated_at               DateTime                     @default(now())
   tb_project_members       tb_project_members[]
-  user_account             user_account?                @relation(fields: [created_by], references: [user_id], onUpdate: SetNull, map: "fk_created_by")
+  user_account             user_account?                @relation(fields: [created_by], references: [user_id], onUpdate: SetNull)
   tb_project_task_statuses tb_project_task_statuses[]
   tb_project_tasks         tb_project_tasks[]
 
-  @@index([created_by], map: "fk_created_by")
+  @@index([created_by])
 }
 
 model tb_project_task_statuses {
@@ -81,13 +81,13 @@ model tb_project_task_statuses {
   order_index          Int?                   @default(0)
   is_default           Boolean?               @default(false)
   is_done              Boolean?               @default(false)
-  created_at           DateTime?              @default(now()) @db.DateTime(0)
-  updated_at           DateTime?              @default(now()) @db.DateTime(0)
+  created_at           DateTime?              @default(now())
+  updated_at           DateTime?              @default(now())
   tb_project_sub_tasks tb_project_sub_tasks[]
-  tb_project_projects  tb_project_projects    @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_project_id")
+  tb_project_projects  tb_project_projects    @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   tb_project_tasks     tb_project_tasks[]
 
-  @@index([project_id], map: "fk_task_project_id")
+  @@index([project_id])
 }
 
 model tb_project_tasks {
@@ -96,21 +96,21 @@ model tb_project_tasks {
   title                    String?                    @db.VarChar(255)
   description              String?                    @db.Text
   status_id                Int
-  assigned_to              String                     @db.VarChar(255)
+  assigned_to              String                     @db.Uuid
   priority                 tb_project_tasks_priority
   progress_percent         Decimal?                   @default(0.00) @db.Decimal(5, 2)
-  created_at               DateTime                   @default(now()) @db.DateTime(0)
-  updated_at               DateTime                   @default(now()) @db.DateTime(0)
+  created_at               DateTime                   @default(now())
+  updated_at               DateTime                   @default(now())
   tb_project_sub_tasks     tb_project_sub_tasks[]
   tb_project_task_comments tb_project_task_comments[]
   tb_project_task_logs     tb_project_task_logs[]
-  user_account             user_account               @relation(fields: [assigned_to], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_assignedto")
-  tb_project_projects      tb_project_projects        @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_project_id")
-  tb_project_task_statuses tb_project_task_statuses   @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_tasks_status_id")
+  user_account             user_account               @relation(fields: [assigned_to], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+  tb_project_projects      tb_project_projects        @relation(fields: [project_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tb_project_task_statuses tb_project_task_statuses   @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([assigned_to], map: "fk_tasks_assignedto")
-  @@index([project_id], map: "fk_tasks_project_id")
-  @@index([status_id], map: "fk_tasks_status_id")
+  @@index([assigned_to])
+  @@index([project_id])
+  @@index([status_id])
 }
 
 model tb_project_sub_tasks {
@@ -120,64 +120,64 @@ model tb_project_sub_tasks {
   description                   String                          @db.Text
   status_id                     Int
   progress_percent              Decimal                         @db.Decimal(5, 2)
-  start_date                    DateTime                        @db.DateTime(0)
+  start_date                    DateTime
   has_due_date                  Boolean?
-  due_date                      DateTime?                       @db.DateTime(0)
-  completed_date                DateTime?                       @db.DateTime(0)
-  created_at                    DateTime                        @default(now()) @db.DateTime(0)
-  updated_at                    DateTime                        @default(now()) @db.DateTime(0)
+  due_date                      DateTime?
+  completed_date                DateTime?
+  created_at                    DateTime                        @default(now())
+  updated_at                    DateTime                        @default(now())
   tb_project_sub_task_assignees tb_project_sub_task_assignees[]
-  tb_project_task_statuses      tb_project_task_statuses        @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sub_task_status_id")
-  tb_project_tasks              tb_project_tasks                @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sub_task_task_id")
+  tb_project_task_statuses      tb_project_task_statuses        @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tb_project_tasks              tb_project_tasks                @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   tb_project_task_logs          tb_project_task_logs[]
 
-  @@index([status_id], map: "fk_sub_task_status_id")
-  @@index([task_id], map: "fk_sub_task_task_id")
+  @@index([status_id])
+  @@index([task_id])
 }
 
 model tb_project_sub_task_assignees {
   id                   Int                  @id @default(autoincrement())
   subtask_id           Int
-  user_id              String               @db.VarChar(255)
-  assigned_at          DateTime             @default(now()) @db.DateTime(0)
-  tb_project_sub_tasks tb_project_sub_tasks @relation(fields: [subtask_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_project_sub_task_sub_task_id")
-  user_account         user_account         @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_project_user_id")
+  user_id              String               @db.Uuid
+  assigned_at          DateTime             @default(now())
+  tb_project_sub_tasks tb_project_sub_tasks @relation(fields: [subtask_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_account         user_account         @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([subtask_id], map: "fk_project_sub_task_sub_task_id")
-  @@index([user_id], map: "fk_project_user_id")
+  @@index([subtask_id])
+  @@index([user_id])
 }
 
 model tb_project_task_logs {
   id                   Int                   @id @default(autoincrement())
   task_id              Int
   subtask_id           Int?
-  changed_by           String?               @db.VarChar(255)
+  changed_by           String?               @db.Uuid
   old_status_id        Int
   new_status_id        Int
   old_progress         Decimal               @db.Decimal(5, 2)
   new_progress         Decimal               @db.Decimal(5, 2)
-  created_at           DateTime              @default(now()) @db.DateTime(0)
-  user_account         user_account?         @relation(fields: [changed_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_log_change_by")
-  tb_project_sub_tasks tb_project_sub_tasks? @relation(fields: [subtask_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_log_subtask_id")
-  tb_project_tasks     tb_project_tasks      @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_log_task_id")
+  created_at           DateTime              @default(now())
+  user_account         user_account?         @relation(fields: [changed_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+  tb_project_sub_tasks tb_project_sub_tasks? @relation(fields: [subtask_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tb_project_tasks     tb_project_tasks      @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([changed_by], map: "fk_task_log_change_by")
-  @@index([subtask_id], map: "fk_task_log_subtask_id")
-  @@index([task_id], map: "fk_task_log_task_id")
+  @@index([changed_by])
+  @@index([subtask_id])
+  @@index([task_id])
 }
 
 model tb_project_task_comments {
   id               Int              @id @default(autoincrement())
   task_id          Int
-  user_id          String           @db.VarChar(255)
+  user_id          String           @db.Uuid
   message          String           @db.Text
-  created_at       DateTime?        @default(now()) @db.DateTime(0)
-  updated_at       DateTime?        @default(now()) @db.DateTime(0)
-  tb_project_tasks tb_project_tasks @relation(fields: [task_id], references: [id], onDelete: Cascade, map: "fk_task_comments_task_id")
-  user_account     user_account     @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_task_comments_user_id")
+  created_at       DateTime?        @default(now())
+  updated_at       DateTime?        @default(now())
+  tb_project_tasks tb_project_tasks @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  user_account     user_account     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
-  @@index([task_id], map: "fk_task_comments_task_id")
-  @@index([user_id], map: "fk_task_comments_user_id")
+  @@index([task_id])
+  @@index([user_id])
 }
 
 enum tb_project_members_status {

@@ -26,7 +26,6 @@ export class UserAccountController {
   constructor(private readonly userAccountService: UserAccountService) {}
 
   @Post('register')
-  @Roles('admin')
   @UseInterceptors(FileInterceptor('profile', createMulterOptions('users', 2)))
   register(
     @UploadedFile() file: Express.Multer.File,
