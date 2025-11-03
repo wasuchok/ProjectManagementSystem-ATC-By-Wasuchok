@@ -928,20 +928,23 @@ export default function KanbanBoard() {
                     const updates = timelineBySubtask.get(String(subtask.id)) ?? [];
                     const now = new Date();
                     const compareEndForLate = completedDate ?? (progress >= 100 ? now : null);
+                    // compare against end-of-day of due date to avoid same-day false late
+                    const dueStartOfDay = dueDate ? new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), 0, 0, 0, 0) : null;
+                    const dueEndOfDay = dueDate ? new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), 23, 59, 59, 999) : null;
                     const isLate =
                         progress >= 100 &&
                         hasDue &&
-                        dueDate != null &&
+                        dueEndOfDay != null &&
                         compareEndForLate != null &&
-                        compareEndForLate.getTime() > dueDate.getTime();
+                        compareEndForLate.getTime() > dueEndOfDay.getTime();
 
                     const compareEndForEarly = completedDate ?? (progress >= 100 ? now : null);
                     const isEarly =
                         progress >= 100 &&
                         hasDue &&
-                        dueDate != null &&
+                        dueStartOfDay != null &&
                         compareEndForEarly != null &&
-                        compareEndForEarly.getTime() < dueDate.getTime();
+                        compareEndForEarly.getTime() < dueStartOfDay.getTime();
 
                     items.push({
                         id: `${task.id}-${subtask.id}`,
@@ -1712,13 +1715,18 @@ export default function KanbanBoard() {
                                                     const progressRatio = Math.min(1, Math.max(0, item.progress / 100));
                                                     const actualEndMs =
                                                         item.progress >= 100
-                                                            ? item.actualEnd.getTime()
+                                                            ? (item.isEarly ? item.actualEnd.getTime() : item.plannedEnd.getTime())
                                                             : item.start.getTime() + plannedDurationMs * progressRatio;
                                                     const actualDurationMs = Math.max(actualEndMs - item.start.getTime(), MS_PER_DAY * 0.35);
                                                     const planLeft = Math.min(Math.max(0, (item.start.getTime() - ganttRange.start.getTime()) / totalMs * 100), 100);
                                                     const planWidth = Math.min(100 - planLeft, Math.max((plannedDurationMs / totalMs) * 100, 2.75));
-                                                    const actualLeft = Math.min(Math.max(0, (item.start.getTime() - ganttRange.start.getTime()) / totalMs * 100), 100);
-                                                    const actualWidth = Math.min(100 - actualLeft, Math.max((actualDurationMs / totalMs) * 100, 2.75));
+                                                    let actualLeft = Math.min(Math.max(0, (item.start.getTime() - ganttRange.start.getTime()) / totalMs * 100), 100);
+                                                    let actualWidth = Math.min(100 - actualLeft, Math.max((actualDurationMs / totalMs) * 100, 2.75));
+                                                    if (item.progress >= 100 && !item.isEarly) {
+                                                        // Force the actual bar to match plan when finished on/after due (not early)
+                                                        actualLeft = planLeft;
+                                                        actualWidth = planWidth;
+                                                    }
                                                     const barColor = item.statusColor ?? "rgba(59,130,246,0.85)";
                                                     const actualColor = item.isLate ? "#ef4444" : (item.isEarly ? "#10b981" : barColor);
                                                     const progressText = `${Math.round(item.progress)}%`;
@@ -1847,6 +1855,11 @@ export default function KanbanBoard() {
                                                                     <span className="rounded-full bg-white/90 px-2 py-[2px] text-[10px] font-semibold text-slate-600 shadow-sm">
                                                                         {progressText}
                                                                     </span>
+                                                                    {/* end-cap marker for readability */}
+                                                                    <span
+                                                                        className={`pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-white ${item.isLate ? 'ring-2 ring-rose-400' : item.isEarly ? 'ring-2 ring-emerald-500' : 'ring-2 ring-white/60'}`}
+                                                                        aria-hidden="true"
+                                                                    />
                                                                     {/* in-bar update markers */}
                                                                     <div className="absolute inset-0">
                                                                         {inBarMarkers.map((marker, markerIndex) => (
