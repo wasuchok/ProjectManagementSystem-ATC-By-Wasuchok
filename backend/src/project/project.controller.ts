@@ -247,8 +247,30 @@ export class ProjectController {
 
   @Get('/:project_id')
   @Roles('admin', 'staff', 'employee')
-  async getProjectDetail(@Param('project_id') project_id: string) {
-    return this.projectService.getProjectDetail(Number(project_id));
+  async getProjectDetail(
+    @Param('project_id') project_id: string,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : '';
+    const roles: string[] = Array.isArray(authUser?.roles)
+      ? authUser.roles.map((role: any) => String(role))
+      : [];
+
+    if (!userId) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 401, null);
+    }
+
+    return this.projectService.getProjectDetail(
+      Number(project_id),
+      userId,
+      roles,
+    );
   }
 
   @Patch('/:project_id')

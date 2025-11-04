@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, tb_project_members_status, $Enums } from 'generated/prisma';
 import { ApiResponse } from 'src/common/dto/api-response.dto';
 import { EventsGateway } from 'src/event/events.gateway';
@@ -1060,9 +1065,13 @@ export class ProjectService {
     return new ApiResponse('สร้างความคิดเห็นสำเร็จ', 201, formatted);
   }
 
-  async getProjectDetail(project_id: number) {
+  async getProjectDetail(
+    project_id: number,
+    userId: string,
+    roles: string[],
+  ) {
     if (!project_id) {
-      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+      throw new BadRequestException('กรุณาระบุโปรเจกต์');
     }
 
     type ProjectWithMembers = Prisma.tb_project_projectsGetPayload<{
@@ -1090,7 +1099,33 @@ export class ProjectService {
     })) as ProjectWithMembers | null;
 
     if (!project) {
-      return new ApiResponse('ไม่พบโปรเจกต์ที่ระบุ', 404, null);
+      throw new NotFoundException('ไม่พบโปรเจกต์ที่ระบุ');
+    }
+
+    const normalizedUserId = userId != null ? String(userId) : '';
+    const normalizedRoles = Array.isArray(roles)
+      ? roles.map((role) => String(role).toLowerCase())
+      : [];
+    const isAdmin = normalizedRoles.includes('admin');
+
+    const isOwner =
+      project.created_by != null &&
+      String(project.created_by) === normalizedUserId;
+
+    let isMember = false;
+    if (normalizedUserId) {
+      const member = await this.prisma.tb_project_members.findFirst({
+        where: {
+          project_id,
+          user_id: normalizedUserId,
+          status: { in: [tb_project_members_status.joined] },
+        },
+      });
+      isMember = Boolean(member);
+    }
+
+    if (!isOwner && !isMember && !isAdmin) {
+      throw new ForbiddenException('คุณไม่มีสิทธิ์เข้าถึงโปรเจกต์นี้');
     }
 
     let ownerAccount: any = null;
