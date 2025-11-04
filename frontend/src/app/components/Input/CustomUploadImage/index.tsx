@@ -25,6 +25,8 @@ const CustomUploadImage: React.FC<CustomUploadImageProps> = ({
     useEffect(() => {
         if (defaultImageUrl) {
             setPreviewUrl(defaultImageUrl);
+        } else {
+            setPreviewUrl(null);
         }
     }, [defaultImageUrl]);
 

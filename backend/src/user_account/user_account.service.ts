@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -8,10 +9,13 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import type { Response } from 'express';
 
+import { unlink } from 'node:fs/promises';
+
 import { ApiResponse } from 'src/common/dto/api-response.dto';
 import { PrismaService } from 'src/prisma.service';
 import { LoginUserDto } from './dto/login-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { UpdateUserAccountDto } from './dto/update-user_account.dto';
 
 @Injectable()
 export class UserAccountService {
@@ -286,5 +290,131 @@ export class UserAccountService {
           };
 
     return new ApiResponse('เรียกข้อมูลผู้ใช้ทั้งหมด', 200, responseData);
+  }
+
+  async readUserSingle(id: string) {
+    const user = await this.prisma.user_account.findUnique({
+      where: { user_id: id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('ไม่พบผู้ใช้');
+    }
+
+    const { password_hash, refresh_token, ...sanitizedUser } = user;
+
+    return new ApiResponse('เรียกข้อมูลผู้ใช้', 200, sanitizedUser);
+  }
+
+  async update(
+    id: string,
+    updateUserDto: UpdateUserAccountDto,
+    file?: Express.Multer.File,
+  ) {
+    const user = await this.prisma.user_account.findUnique({
+      where: { user_id: id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('ไม่พบผู้ใช้');
+    }
+
+    const data: any = {};
+    const removeImageFlag = this.normalizeBoolean(updateUserDto.remove_image);
+    let deletePreviousImage = false;
+
+    if (
+      updateUserDto.username &&
+      updateUserDto.username.toLowerCase() !== user.username?.toLowerCase()
+    ) {
+      const existingUser = await this.prisma.user_account.findFirst({
+        where: {
+          username: updateUserDto.username,
+          NOT: { user_id: id },
+        },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('มีผู้ใช้งานนี้แล้ว');
+      }
+
+      data.username = updateUserDto.username;
+    }
+
+    if (updateUserDto.password) {
+      data.password_hash = await argon2.hash(updateUserDto.password);
+    }
+
+    if (updateUserDto.email !== undefined) {
+      data.email = updateUserDto.email;
+    }
+    if (updateUserDto.full_name !== undefined) {
+      data.full_name = updateUserDto.full_name;
+    }
+    if (updateUserDto.department !== undefined) {
+      data.department = updateUserDto.department;
+    }
+    if (updateUserDto.position !== undefined) {
+      data.position = updateUserDto.position;
+    }
+
+    if (updateUserDto.role) {
+      const role = updateUserDto.role.toLowerCase();
+      data.v_admin = role === 'admin' ? 1 : 0;
+      data.v_create = role === 'admin' || role === 'staff' ? 1 : 0;
+    }
+
+    if (file) {
+      data.image = file.path;
+      deletePreviousImage = Boolean(user.image);
+    } else if (removeImageFlag) {
+      data.image = null;
+      deletePreviousImage = Boolean(user.image);
+    }
+
+    if (Object.keys(data).length === 0) {
+      const { password_hash, refresh_token, ...sanitizedUser } = user;
+      return new ApiResponse('ไม่มีข้อมูลที่ต้องอัปเดต', 200, sanitizedUser);
+    }
+
+    await this.prisma.user_account.update({
+      where: { user_id: id },
+      data,
+    });
+
+    if (deletePreviousImage) {
+      await this.deleteFileIfExists(user.image);
+    }
+
+    const updated = await this.prisma.user_account.findUnique({
+      where: { user_id: id },
+    });
+
+    if (!updated) {
+      throw new NotFoundException('ไม่พบผู้ใช้หลังอัปเดต');
+    }
+
+    const { password_hash, refresh_token, ...sanitizedUser } = updated;
+
+    return new ApiResponse('อัปเดตข้อมูลผู้ใช้สำเร็จ', 200, sanitizedUser);
+  }
+
+  private normalizeBoolean(value?: string | boolean) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return ['true', '1', 'yes', 'on'].includes(value.toLowerCase());
+    }
+    return false;
+  }
+
+  private async deleteFileIfExists(path?: string | null) {
+    if (!path) return;
+    try {
+      await unlink(path);
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') {
+        console.error('Failed to delete file', path, error);
+      }
+    }
   }
 }

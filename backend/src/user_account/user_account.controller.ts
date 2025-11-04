@@ -2,7 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -18,6 +20,7 @@ import { Roles } from 'src/common/role/roles.decorator';
 import { RolesGuard } from 'src/common/role/roles.guard';
 import { LoginUserDto } from './dto/login-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { UpdateUserAccountDto } from './dto/update-user_account.dto';
 import { UserAccountService } from './user_account.service';
 
 @Controller('user-account')
@@ -69,5 +72,22 @@ export class UserAccountController {
   @Roles('admin')
   async readUsers(@Query() query) {
     return this.userAccountService.readUsers(query);
+  }
+
+  @Get('user/:id')
+  @Roles('admin', 'staff', 'employee')
+  async readUserSingle(@Param('id') id: string) {
+    return this.userAccountService.readUserSingle(id);
+  }
+
+  @Put('update/:id')
+  @Roles('admin', 'staff')
+  @UseInterceptors(FileInterceptor('profile', createMulterOptions('users', 2)))
+  async updateUser(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() updateUserDto: UpdateUserAccountDto,
+  ) {
+    return this.userAccountService.update(id, updateUserDto, file);
   }
 }
