@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     'http://10.17.3.244:5555',
     'http://localhost:5555',
+    "http://10.17.3.244:3000",
+    "http://localhost:3000",
   ],
 };
 

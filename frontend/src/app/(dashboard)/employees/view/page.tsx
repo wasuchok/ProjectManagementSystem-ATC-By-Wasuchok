@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 const Page = () => {
     const { t } = useLanguage();
+
     const router = useRouter();
 
     const [data, setData] = useState<any[]>([]);
@@ -86,14 +87,14 @@ const Page = () => {
 
     return (
         <div className="space-y-6">
-            {/* ✅ ส่วนหัวของหน้า */}
+
             <div className="flex flex-col gap-5 rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:flex-row md:items-center md:justify-between">
                 <div className="space-y-2">
                     <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         {t("employee.menu_title")}
                     </span>
                     <h1 className="text-2xl font-semibold text-slate-800">
-                        👥 {t("employee.title")}
+                        {t("employee.title")}
                     </h1>
                     <p className="max-w-xl text-sm text-slate-500">
                         {t("employee.subtitle")}
@@ -104,12 +105,12 @@ const Page = () => {
                         onClick={() => router.push("/employees/create")}
                         className="inline-flex items-center rounded-full bg-gradient-to-r from-primary-500 to-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-primary-600 hover:to-primary-700"
                     >
-                        ➕ {t("employee.add")}
+                        {t("employee.add")}
                     </CustomButton>
                 </div>
             </div>
 
-            {/* ✅ ตารางพนักงาน */}
+
             <div className="mt-6 rounded-3xl border border-slate-100 bg-white/90 p-3 shadow-sm backdrop-blur-sm">
                 <ScrollableTable
                     columns={columns}
@@ -118,8 +119,8 @@ const Page = () => {
                     currentPage={currentPage}
                     totalPages={totalPages}
                     onPageChange={setCurrentPage}
-                    onEdit={(row) => console.log("Edit:", row)}
-                    onDelete={(row) => console.log("Delete:", row)}
+                    onEdit={(row) => router.push(`/employees/edit/${row.user_id}`)}
+                    onDelete={(row) => console.log("Delete:", row.user_id)}
                 />
             </div>
         </div>

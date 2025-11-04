@@ -2,35 +2,37 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FaClipboardList, FaHome, FaSlidersH, FaUser, FaUsers } from "react-icons/fa";
+import { FaClipboardList, FaHome, FaSlidersH, FaUsers } from "react-icons/fa";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const Sidebar = ({ isOpen, onToggle }: any) => {
     const pathname = usePathname();
+    const { t } = useLanguage()
 
     const menuItems = [
         {
             key: "home",
-            label: "Home",
+            label: t("main_menu.home"),
             icon: <FaHome className="w-5 h-5 mr-3" />,
             href: "/home/view",
         },
         {
             key: "boards",
-            label: "Boards",
+            label: t("main_menu.boards"),
             icon: <FaClipboardList className="w-5 h-5 mr-3" />,
             href: "/boards/view",
         },
         {
             key: "employees",
-            label: "Employees",
+            label: t("main_menu.employees"),
             icon: <FaUsers className="w-5 h-5 mr-3" />,
             href: "/employees/view",
         },
         {
-            key: "manage",
-            label: "Manage",
+            key: "setting",
+            label: t("main_menu.setting"),
             icon: <FaSlidersH className="w-5 h-5 mr-3" />,
-            href: "/manage",
+            href: "/setting",
         },
     ];
 
@@ -47,7 +49,7 @@ const Sidebar = ({ isOpen, onToggle }: any) => {
 
 
             <nav className="mt-8 px-3 space-y-3">
-                <div className="text-gray-400 text-sm font-semibold">MAIN MENU</div>
+                <div className="text-gray-400 text-sm font-semibold">{t('main_menu.head')}</div>
                 <hr />
 
                 {menuItems.map((item) => {
@@ -77,18 +79,7 @@ const Sidebar = ({ isOpen, onToggle }: any) => {
                 })}
             </nav>
 
-            {/* Footer User Info */}
-            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-gray-100 bg-gray-50">
-                <div className="flex items-center space-x-2 hover:bg-white hover:rounded p-1 transition-colors cursor-pointer">
-                    <div className="w-7 h-7 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
-                        <FaUser className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <div className="text-xs min-w-0">
-                        <p className="font-medium text-gray-900 truncate">Wasuchok Jainam</p>
-                        <p className="text-gray-500">Admin</p>
-                    </div>
-                </div>
-            </div>
+
         </div>
     );
 };

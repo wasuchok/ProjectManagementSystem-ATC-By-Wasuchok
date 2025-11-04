@@ -13,7 +13,8 @@
         "table_no": "#",
         "title": "Employee List",
         "subtitle": "View and manage all employees in the system.",
-        "menu_title": "Employee Management"
+        "menu_title": "Employee Management",
+        "add": "Add Employee"
     },
     "please_fill_in_information": "Please fill in information....",
     "no_data_avaliable": "No data available",
@@ -162,5 +163,12 @@
         "of": "of",
         "previous": "Previous",
         "next": "Next"
+    },
+    "main_menu": {
+        "head": "Main Menu",
+        "home": "Home",
+        "boards": "Boards",
+        "employees": "Employees",
+        "setting": "Setting"
     }
 }
