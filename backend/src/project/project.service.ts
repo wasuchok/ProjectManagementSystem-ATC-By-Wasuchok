@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, tb_project_members_status } from 'generated/prisma';
+import { Prisma, tb_project_members_status, $Enums } from 'generated/prisma';
 import { ApiResponse } from 'src/common/dto/api-response.dto';
 import { EventsGateway } from 'src/event/events.gateway';
 import { PrismaService } from 'src/prisma.service';
@@ -1058,6 +1058,75 @@ export class ProjectService {
     }
 
     return new ApiResponse('สร้างความคิดเห็นสำเร็จ', 201, formatted);
+  }
+
+  async updateProjectStatus(
+    project_id: number,
+    status: string,
+    userId: string,
+    roles: string[],
+  ) {
+    if (!project_id) {
+      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+    }
+
+    const normalizedStatus = (status ?? '').toLowerCase().trim();
+    const allowedStatuses = new Set(['draft', 'started', 'completed', 'cancelled']);
+
+    if (!normalizedStatus || !allowedStatuses.has(normalizedStatus)) {
+      return new ApiResponse('สถานะที่ต้องการไม่ถูกต้อง', 400, null);
+    }
+
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      select: {
+        id: true,
+        status: true,
+        created_by: true,
+      },
+    });
+
+    if (!project) {
+      return new ApiResponse('ไม่พบโปรเจกต์ที่ระบุ', 404, null);
+    }
+
+    const normalizedUserId = userId != null ? String(userId) : '';
+    const isOwner =
+      project.created_by != null &&
+      String(project.created_by) === normalizedUserId;
+
+    const normalizedRoles = Array.isArray(roles)
+      ? roles.map((role) => String(role).toLowerCase())
+      : [];
+    const hasPrivilegedRole = normalizedRoles.some((role) =>
+      ['admin', 'staff'].includes(role),
+    );
+
+    if (!isOwner && !hasPrivilegedRole) {
+      return new ApiResponse('คุณไม่มีสิทธิ์เปลี่ยนสถานะโปรเจกต์นี้', 403, null);
+    }
+
+    if (
+      (project.status ?? '').toLowerCase().trim() === normalizedStatus
+    ) {
+      return new ApiResponse('สถานะโปรเจกต์ถูกอัปเดตแล้ว', 200, project);
+    }
+
+    const updatedProject = await this.prisma.tb_project_projects.update({
+      where: { id: project_id },
+      data: {
+        status: normalizedStatus as $Enums.tb_project_projects_status,
+        updated_at: new Date(),
+      },
+    });
+
+    this.eventsGateway.broadcastToProject(project_id, 'project:status:updated', {
+      projectId: project_id,
+      status: normalizedStatus,
+      previousStatus: project.status ?? null,
+    });
+
+    return new ApiResponse('อัปเดตสถานะโปรเจกต์สำเร็จ', 200, updatedProject);
   }
 
   async moveTask(task_id: number, status_id: number) {
