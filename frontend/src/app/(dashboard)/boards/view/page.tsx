@@ -88,18 +88,36 @@ const Page = () => {
             if (response.status === 200) {
                 const { result, pagination } = response.data.data;
 
-                const mappedData = result.map((item: any, index: number) => ({
-                    id: item.id,
-                    projectName: item.name,
-                    priority: item.priority,
-                    status: item.status,
-                    description: item.description,
-                    join_enabled: item.join_enabled,
-                    created_at: new Date(item.created_at).toLocaleDateString("th-TH"),
-                    join_code: item.join_code,
-                    num: (index + 1),
-                    employees: item.tb_project_members
-                }));
+                const mappedData = result.map((item: any, index: number) => {
+                    const ownerId =
+                        item.created_by ??
+                        item.createdBy ??
+                        item.owner_id ??
+                        item.ownerId ??
+                        item.owner?.id ??
+                        item.owner?.user_id ??
+                        item.owner?.userId ??
+                        null;
+
+                    return {
+                        id: item.id,
+                        projectName: item.name,
+                        priority: item.priority,
+                        status: item.status,
+                        description: item.description,
+                        join_enabled: item.join_enabled,
+                        created_at: new Date(item.created_at).toLocaleDateString("th-TH"),
+                        join_code: item.join_code,
+                        num: index + 1,
+                        employees: item.tb_project_members,
+                        created_by: item.created_by ?? item.createdBy ?? null,
+                        owner_id: ownerId,
+                        isOwner:
+                            ownerId != null &&
+                            user?.id != null &&
+                            String(ownerId) === String(user.id),
+                    };
+                });
 
                 setData(mappedData);
                 setTotalPages(pagination.totalPages);

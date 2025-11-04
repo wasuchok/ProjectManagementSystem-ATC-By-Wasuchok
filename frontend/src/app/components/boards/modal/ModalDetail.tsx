@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useLanguage } from "@/app/contexts/LanguageContext";
+import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { encodeSingleHashid } from "@/app/utils/hashids";
 import {
@@ -86,6 +87,7 @@ const STATUS_META = {
 
 const ModalDetail = ({ open, setOpen, project }: any) => {
     const { t } = useLanguage();
+    const { user } = useUser();
     const [taskList, setTaskList] = useState<any[]>([]);
     const [isEditMode, setIsEditMode] = useState(false);
     const [originalTaskList, setOriginalTaskList] = useState<any[]>([]);
@@ -126,9 +128,77 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         }
     }, [open, fetchTaskStatus]);
 
+    const canManageStatuses = useMemo(() => {
+        if (project?.isOwner !== undefined) {
+            return Boolean(project.isOwner);
+        }
+
+        const currentUserId = user?.id;
+        if (currentUserId == null) {
+            return false;
+        }
+
+        const normalizedUserId = String(currentUserId);
+        const matchesCurrentUser = (value: any) =>
+            value != null && String(value) === normalizedUserId;
+
+        const ownerCandidates = [
+            project?.created_by,
+            project?.createdBy,
+            project?.owner_id,
+            project?.ownerId,
+            project?.owner?.id,
+            project?.owner?.user_id,
+            project?.owner?.userId,
+        ];
+
+        for (const candidate of ownerCandidates) {
+            if (typeof candidate === "object" && candidate !== null) {
+                if (
+                    matchesCurrentUser(candidate.id) ||
+                    matchesCurrentUser(candidate.user_id) ||
+                    matchesCurrentUser(candidate.userId)
+                ) {
+                    return true;
+                }
+                continue;
+            }
+
+            if (matchesCurrentUser(candidate)) {
+                return true;
+            }
+        }
+
+        const employees = Array.isArray(project?.employees) ? project.employees : [];
+
+        return employees.some((member: any) => {
+            const hasOwnerRole =
+                member?.is_owner === true ||
+                member?.isOwner === true ||
+                member?.owner === true ||
+                (typeof member?.role === "string" && member.role.toLowerCase() === "owner") ||
+                (typeof member?.member_role === "string" && member.member_role.toLowerCase() === "owner") ||
+                (typeof member?.memberRole === "string" && member.memberRole.toLowerCase() === "owner");
+
+            if (!hasOwnerRole) {
+                return false;
+            }
+
+            const memberIds = [
+                member?.user_account_id,
+                member?.user_account?.id,
+                member?.user_id,
+                member?.employee_id,
+                member?.id,
+            ];
+
+            return memberIds.some((id) => matchesCurrentUser(id));
+        });
+    }, [project, user?.id]);
+
     const handleDragEnd = useCallback((event: any) => {
         const { active, over } = event;
-        if (!isEditMode || !over || active.id === over.id) return;
+        if (!isEditMode || !canManageStatuses || !over || active.id === over.id) return;
 
         setTaskList((items) => {
             const oldIndex = items.findIndex((item) => String(item.id) === String(active.id));
@@ -139,10 +209,10 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             }));
             return updatedItems;
         });
-    }, [isEditMode]);
+    }, [canManageStatuses, isEditMode]);
 
     const handleAddTask = useCallback(() => {
-        if (!isEditMode) return;
+        if (!isEditMode || !canManageStatuses) return;
 
         const newOrder = taskList.length + 1;
         const tempId = `temp-${Date.now()}`;
@@ -157,10 +227,10 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         };
 
         setTaskList((prev) => [...prev, newTask]);
-    }, [isEditMode, taskList.length]);
+    }, [canManageStatuses, isEditMode, taskList.length]);
 
     const handleRemoveTask = useCallback((id: any) => {
-        if (!isEditMode) return;
+        if (!isEditMode || !canManageStatuses) return;
 
         const isTemp = typeof id === 'string' && id.startsWith('temp-');
         if (!isTemp) {
@@ -171,30 +241,30 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             ...item,
             order_index: idx + 1,
         })));
-    }, [isEditMode]);
+    }, [canManageStatuses, isEditMode]);
 
     const handleChangeName = useCallback((id: any, value: string) => {
-        if (!isEditMode) return;
+        if (!isEditMode || !canManageStatuses) return;
 
         setTaskList((prev) =>
             prev.map((task: any) =>
                 String(task.id) === String(id) ? { ...task, name: value } : task
             )
         );
-    }, [isEditMode]);
+    }, [canManageStatuses, isEditMode]);
 
     const handleChangeColor = useCallback((id: any, color: string) => {
-        if (!isEditMode) return;
+        if (!isEditMode || !canManageStatuses) return;
 
         setTaskList((prev) =>
             prev.map((task: any) =>
                 String(task.id) === String(id) ? { ...task, color } : task
             )
         );
-    }, [isEditMode]);
+    }, [canManageStatuses, isEditMode]);
 
     const handleToggle = useCallback((id: any, field: "is_default" | "is_done") => {
-        if (!isEditMode) return;
+        if (!isEditMode || !canManageStatuses) return;
 
         setTaskList((prev) => {
             const current = prev.find((t) => String(t.id) === String(id));
@@ -218,13 +288,14 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 return task;
             });
         });
-    }, [isEditMode]);
+    }, [canManageStatuses, isEditMode]);
 
     const startEdit = useCallback(() => {
+        if (!canManageStatuses) return;
         setOriginalTaskList(JSON.parse(JSON.stringify(taskList)));
         setDeletedIds([]);
         setIsEditMode(true);
-    }, [taskList]);
+    }, [canManageStatuses, taskList]);
 
     const handleCancelEdit = useCallback(() => {
         setDeletedIds([]);
@@ -233,7 +304,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
     }, [fetchTaskStatus]);
 
     const handleDoneEdit = useCallback(async () => {
-        if (isSaving) return;
+        if (!canManageStatuses || isSaving) return;
         setIsSaving(true);
         try {
 
@@ -297,7 +368,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         } finally {
             setIsSaving(false);
         }
-    }, [deletedIds, fetchTaskStatus, isSaving, originalTaskList, taskList]);
+    }, [canManageStatuses, deletedIds, fetchTaskStatus, isSaving, originalTaskList, taskList]);
 
     const members = useMemo(() => project?.employees ?? [], [project?.employees]);
     const taskCount = taskList.length;
@@ -568,43 +639,47 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                         </div>
 
                         <div className="flex items-center gap-2">
-                            {!isEditMode ? (
-                                <button
-                                    onClick={startEdit}
-                                    className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100"
-                                >
-                                    <FiEdit2 size={14} />
-                                    {t("project.edit")}
-                                </button>
-                            ) : (
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={handleCancelEdit}
-                                        disabled={isSaving}
-                                        className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                        <FiX size={14} />
-                                        {t("project.cancel")}
-                                    </button>
-                                    <button
-                                        onClick={handleDoneEdit}
-                                        disabled={isSaving}
-                                        className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
-                                    >
-                                        <FiCheck size={14} />
-                                        {isSaving ? t("project.saving") : t("project.done_status")}
-                                    </button>
-                                </div>
-                            )}
+                            {canManageStatuses && (
+                                <>
+                                    {!isEditMode ? (
+                                        <button
+                                            onClick={startEdit}
+                                            className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100"
+                                        >
+                                            <FiEdit2 size={14} />
+                                            {t("project.edit")}
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={handleCancelEdit}
+                                                disabled={isSaving}
+                                                className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                            >
+                                                <FiX size={14} />
+                                                {t("project.cancel")}
+                                            </button>
+                                            <button
+                                                onClick={handleDoneEdit}
+                                                disabled={isSaving}
+                                                className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                                            >
+                                                <FiCheck size={14} />
+                                                {isSaving ? t("project.saving") : t("project.done_status")}
+                                            </button>
+                                        </div>
+                                    )}
 
-                            <button
-                                onClick={handleAddTask}
-                                disabled={!isEditMode || isSaving}
-                                className="flex items-center gap-1.5 rounded-md bg-green-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                            >
-                                <FiPlus size={14} />
-                                {t("project.add")}
-                            </button>
+                                    <button
+                                        onClick={handleAddTask}
+                                        disabled={!isEditMode || isSaving}
+                                        className="flex items-center gap-1.5 rounded-md bg-green-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                                    >
+                                        <FiPlus size={14} />
+                                        {t("project.add")}
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -639,13 +714,15 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                             <p className="text-sm text-gray-500 mb-4">
                                 {t("project.task_logs_empty")}
                             </p>
-                            <button
-                                onClick={handleAddTask}
-                                className="flex items-center gap-1 mx-auto px-4 py-2 rounded-lg text-sm font-medium text-primary-600 border border-primary-300 hover:bg-primary-50 transition disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={!isEditMode || isSaving}
-                            >
-                                <FiPlus size={14} /> เพิ่มหัวข้องานแรก
-                            </button>
+                            {canManageStatuses && (
+                                <button
+                                    onClick={handleAddTask}
+                                    className="flex items-center gap-1 mx-auto px-4 py-2 rounded-lg text-sm font-medium text-primary-600 border border-primary-300 hover:bg-primary-50 transition disabled:cursor-not-allowed disabled:opacity-60"
+                                    disabled={!isEditMode || isSaving}
+                                >
+                                    <FiPlus size={14} /> เพิ่มหัวข้องานแรก
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>

@@ -28,7 +28,8 @@
         "account_access": "การเข้าถึงบัญชี",
         "account_access_subtitle": "กำหนดข้อมูลเข้าสู่ระบบและสิทธิ์การใช้งานสำหรับพนักงานคนนี้",
         "personal_information": "ข้อมูลส่วนบุคคล",
-        "personal_information_subtitle": "ข้อมูลแผนกช่วยให้แดชบอร์ดและรายงานเหมาะกับบุคคลมากขึ้น"
+        "personal_information_subtitle": "ข้อมูลแผนกช่วยให้แดชบอร์ดและรายงานเหมาะกับบุคคลมากขึ้น",
+        "profile_picture": "รูปโปรไฟล์"
     },
     "please_fill_in_information": "กรุณากรอกข้อมูลให้ครบ....",
     "no_data_avaliable": "ไม่มีข้อมูล",
@@ -184,5 +185,12 @@
         "boards": "กระดานบอร์ด",
         "employees": "รายชื่อพนักงาน",
         "setting": "ตั้งค่าระบบ"
+    },
+    "actions": {
+        "edit": "แก้ไข",
+        "delete": "ลบ",
+        "view": "ดูรายละเอียด",
+        "save": "บันทึก",
+        "cancel": "ยกเลิก"
     }
 }

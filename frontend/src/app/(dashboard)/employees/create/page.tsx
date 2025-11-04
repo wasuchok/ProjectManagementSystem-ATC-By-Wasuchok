@@ -342,10 +342,10 @@ const Page = () => {
                                 onClick={() => reset()}
                                 className="w-full sm:w-auto"
                             >
-                                ยกเลิก
+                                {t('actions.cancel')}
                             </CustomButton>
                             <CustomButton type="submit" className="w-full sm:w-auto">
-                                บันทึก
+                                {t('actions.save')}
                             </CustomButton>
                         </div>
                     </div>

@@ -376,6 +376,7 @@ const Page = () => {
                                             rules={{ required: t("please_fill_in_information") }}
                                             render={({ field }) => (
                                                 <TextField
+                                                    readOnly
                                                     required
                                                     label={t("employee.username")}
                                                     placeholder={t("please_fill_in_information")}
@@ -506,7 +507,7 @@ const Page = () => {
                                         />
                                     ) : (
                                         <div className="flex h-full w-full items-center justify-center text-2xl text-slate-400">
-                                            {previewValues.full_name?.charAt(0) || "👤"}
+                                            {previewValues.full_name?.charAt(0) || "?"}
                                         </div>
                                     )}
                                 </div>
