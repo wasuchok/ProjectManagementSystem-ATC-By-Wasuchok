@@ -486,7 +486,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     <Lottie
                         animationData={projectAnimation}
                         loop
-                        className="pointer-events-none h-40 w-40 translate-x-6"
+                        className="pointer-events-none h-64 w-64 translate-x-6"
                     />
                 </div>
                 <div className="relative z-10 flex flex-col gap-4 text-slate-800">
@@ -572,7 +572,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                 <button
                                     onClick={startEdit}
                                     className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100"
-                                    >
+                                >
                                     <FiEdit2 size={14} />
                                     {t("project.edit")}
                                 </button>
@@ -687,12 +687,12 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                         </p>
                     </div>
 
-                            {members.length > 0 ? (
-                                <div className="max-h-60 overflow-y-auto pr-1 space-y-3">
-                                    {members.map((member: any) => (
-                                        <div
-                                            key={member.id}
-                                            className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors duration-200 border border-gray-100"
+                    {members.length > 0 ? (
+                        <div className="max-h-60 overflow-y-auto pr-1 space-y-3">
+                            {members.map((member: any) => (
+                                <div
+                                    key={member.id}
+                                    className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors duration-200 border border-gray-100"
                                 >
                                     <div className="flex items-center gap-3">
                                         <img
@@ -719,8 +719,8 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                     <span
                                         className={`text-xs px-3 py-1 rounded-full font-medium ${member.status === "joined"
                                             ? "bg-green-50 text-green-700 border border-green-200"
-                                                        : "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                                                        }`}
+                                            : "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                                            }`}
                                     >
                                         {member.status === "joined" ? "Joined" : "Invited"}
                                     </span>
