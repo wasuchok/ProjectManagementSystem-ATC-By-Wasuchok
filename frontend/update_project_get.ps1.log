@@ -1,0 +1,36 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20251104163525
+Username: ATCTHAI\wasuchok_j
+RunAs User: ATCTHAI\wasuchok_j
+Configuration Name: 
+Machine: CM-2209-022 (Microsoft Windows NT 10.0.26100.0)
+Host Application: powershell.exe -NoLogo -NoProfile -Command Set-Location -LiteralPath 'd:\Project Management System\frontend'; Start-Transcript -Path update_project_get.ps1.log -Force; Set-Location '..\backend'; ../.venv/Scripts/activate 2>$null; npx --yes @nestjs/cli@latest generate controller project --no-spec --dry-run; Stop-Transcript
+Process ID: 9028
+PSVersion: 5.1.26100.6584
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.6584
+BuildVersion: 10.0.26100.6584
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is update_project_get.ps1.log
+../.venv/Scripts/activate : The term '../.venv/Scripts/activate' is not recognized as the name of a cmdlet, function, 
+script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is 
+correct and try again.
+At line:1 char:153
++ ...  -Force; Set-Location '..\backend'; ../.venv/Scripts/activate 2>$null ...
++                                         ~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (../.venv/Scripts/activate:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+../.venv/Scripts/activate : The term '../.venv/Scripts/activate' is not recognized as the name of a cmdlet, function,
+script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is
+correct and try again.
+At line:1 char:153
++ ...  -Force; Set-Location '..\backend'; ../.venv/Scripts/activate 2>$null ...
++                                         ~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (../.venv/Scripts/activate:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+

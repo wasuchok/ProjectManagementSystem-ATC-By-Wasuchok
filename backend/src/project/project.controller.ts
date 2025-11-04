@@ -245,6 +245,12 @@ export class ProjectController {
     return this.projectService.getAutoAssignSuggestions(Number(project_id));
   }
 
+  @Get('/:project_id')
+  @Roles('admin', 'staff', 'employee')
+  async getProjectDetail(@Param('project_id') project_id: string) {
+    return this.projectService.getProjectDetail(Number(project_id));
+  }
+
   @Patch('/:project_id')
   @Roles('admin', 'staff', 'employee')
   async updateProjectStatus(

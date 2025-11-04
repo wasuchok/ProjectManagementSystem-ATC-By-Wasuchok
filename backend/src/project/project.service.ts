@@ -1060,6 +1060,64 @@ export class ProjectService {
     return new ApiResponse('สร้างความคิดเห็นสำเร็จ', 201, formatted);
   }
 
+  async getProjectDetail(project_id: number) {
+    if (!project_id) {
+      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+    }
+
+    type ProjectWithMembers = Prisma.tb_project_projectsGetPayload<{
+      include: {
+        tb_project_members: {
+          include: {
+            user_account: true;
+          };
+        };
+      };
+    }>;
+
+    const project = (await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      include: {
+        tb_project_members: {
+          include: {
+            user_account: true,
+          },
+          orderBy: {
+            joined_at: 'asc',
+          },
+        },
+      },
+    })) as ProjectWithMembers | null;
+
+    if (!project) {
+      return new ApiResponse('ไม่พบโปรเจกต์ที่ระบุ', 404, null);
+    }
+
+    let ownerAccount: any = null;
+    if (project.created_by != null) {
+      ownerAccount = await this.prisma.user_account.findUnique({
+        where: { user_id: String(project.created_by) },
+        select: {
+          user_id: true,
+          full_name: true,
+          username: true,
+          department: true,
+          position: true,
+          image: true,
+          email: true,
+        },
+      });
+    }
+
+    const data = {
+      ...project,
+      owner: ownerAccount,
+      employees: project.tb_project_members,
+    };
+
+    return new ApiResponse('success', 200, data);
+  }
+
   async updateProjectStatus(
     project_id: number,
     status: string,
