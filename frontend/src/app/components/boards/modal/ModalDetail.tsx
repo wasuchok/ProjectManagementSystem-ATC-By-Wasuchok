@@ -1,55 +1,136 @@
-"use client"
+﻿"use client";
+
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { encodeSingleHashid } from "@/app/utils/hashids";
-import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+    closestCenter,
+    DndContext,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from "@dnd-kit/core";
+import {
+    arrayMove,
+    SortableContext,
+    useSortable,
+    verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Lottie from "lottie-react";
 import Link from "next/link";
-import { memo, useEffect, useState } from "react";
-import { FiCalendar, FiCheck, FiClipboard, FiEdit2, FiFileText, FiFlag, FiHash, FiPlay, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import {
+    memo,
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
+import {
+    FiCalendar,
+    FiCheck,
+    FiClipboard,
+    FiEdit2,
+    FiFileText,
+    FiFlag,
+    FiHash,
+    FiPlay,
+    FiPlus,
+    FiTrash2,
+    FiUsers,
+    FiX,
+} from "react-icons/fi";
 import { LuGripVertical } from "react-icons/lu";
 import projectAnimation from "../../../../../public/Comacon - planning.json";
 import TextArea from "../../Input/TextArea";
 import TextField from "../../Input/TextField";
 import MinimalModal from "../../MinimalModal";
 
+const PRIORITY_META = {
+    urgent: {
+        label: "เร่งด่วน (Urgent)",
+        className: "bg-red-50 text-red-700 border border-red-200",
+    },
+    high: {
+        label: "สูง (High)",
+        className: "bg-orange-50 text-orange-700 border border-orange-200",
+    },
+    normal: {
+        label: "ปกติ (Normal)",
+        className: "bg-gray-100 text-gray-700 border border-gray-300",
+    },
+    low: {
+        label: "ต่ำ (Low)",
+        className: "bg-green-50 text-green-700 border border-green-200",
+    },
+} as const;
+
+const STATUS_META = {
+    draft: {
+        label: "ร่าง (Draft)",
+        className: "bg-gray-100 text-gray-700 border border-gray-300",
+    },
+    started: {
+        label: "เริ่มต้นแล้ว (Started)",
+        className: "bg-blue-50 text-blue-700 border border-blue-200",
+    },
+    completed: {
+        label: "เสร็จสิ้น (Completed)",
+        className: "bg-green-50 text-green-700 border border-green-200",
+    },
+    cancelled: {
+        label: "ยกเลิก (Cancelled)",
+        className: "bg-red-50 text-red-700 border border-red-200",
+    },
+} as const;
+
 const ModalDetail = ({ open, setOpen, project }: any) => {
     const { t } = useLanguage();
-    const [taskList, setTaskList] = useState<any>([]);
+    const [taskList, setTaskList] = useState<any[]>([]);
     const [isEditMode, setIsEditMode] = useState(false);
     const [originalTaskList, setOriginalTaskList] = useState<any[]>([]);
     const [deletedIds, setDeletedIds] = useState<number[]>([]);
     const [focusedTaskId, setFocusedTaskId] = useState<any>(null);
-
-    const getTaskStatus = async () => {
-        try {
-            const response = await apiPrivate.get(`/project/task-status/get-all-status-by-project/${project.id}`)
-
-            if (response.status == 200) {
-
-                setTaskList(response.data.data);
-            }
-        } catch (error) {
-            console.log(error)
-        }
-    }
-
-    useEffect(() => {
-        getTaskStatus()
-    }, [])
-
+    const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
     );
 
-    const handleDragEnd = (event: any) => {
+    const fetchTaskStatus = useCallback(async () => {
+        if (!project?.id) return;
+        setIsLoadingStatus(true);
+        try {
+            const response = await apiPrivate.get(
+                `/project/task-status/get-all-status-by-project/${project.id}`
+            );
+
+            if (response.status === 200) {
+                const sorted = (response.data.data || [])
+                    .slice()
+                    .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0));
+                setTaskList(sorted);
+            }
+        } catch (error) {
+            console.error("fetch task status error", error);
+        } finally {
+            setIsLoadingStatus(false);
+        }
+    }, [project?.id]);
+
+    useEffect(() => {
+        if (open) {
+            fetchTaskStatus();
+            setIsEditMode(false);
+        }
+    }, [open, fetchTaskStatus]);
+
+    const handleDragEnd = useCallback((event: any) => {
         const { active, over } = event;
         if (!isEditMode || !over || active.id === over.id) return;
 
-        setTaskList((items: any[]) => {
+        setTaskList((items) => {
             const oldIndex = items.findIndex((item) => String(item.id) === String(active.id));
             const newIndex = items.findIndex((item) => String(item.id) === String(over.id));
             const updatedItems = arrayMove(items, oldIndex, newIndex).map((item: any, index: number) => ({
@@ -58,9 +139,9 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             }));
             return updatedItems;
         });
-    };
+    }, [isEditMode]);
 
-    const handleAddTask = async () => {
+    const handleAddTask = useCallback(() => {
         if (!isEditMode) return;
 
         const newOrder = taskList.length + 1;
@@ -75,10 +156,10 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             _isNew: true,
         };
 
-        setTaskList((prev: any) => [...prev, newTask]);
-    };
+        setTaskList((prev) => [...prev, newTask]);
+    }, [isEditMode, taskList.length]);
 
-    const handleRemoveTask = async (id: any) => {
+    const handleRemoveTask = useCallback((id: any) => {
         if (!isEditMode) return;
 
         const isTemp = typeof id === 'string' && id.startsWith('temp-');
@@ -86,36 +167,36 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             setDeletedIds((prev) => Array.from(new Set([...(prev || []), Number(id)])));
         }
 
-        setTaskList((prev: any[]) => prev.filter((t) => String(t.id) !== String(id)).map((item, idx) => ({
+        setTaskList((prev) => prev.filter((t) => String(t.id) !== String(id)).map((item, idx) => ({
             ...item,
             order_index: idx + 1,
         })));
-    };
+    }, [isEditMode]);
 
-    const handleChangeName = async (id: any, value: string) => {
+    const handleChangeName = useCallback((id: any, value: string) => {
         if (!isEditMode) return;
 
-        setTaskList((prev: any) =>
+        setTaskList((prev) =>
             prev.map((task: any) =>
                 String(task.id) === String(id) ? { ...task, name: value } : task
             )
         );
-    };
+    }, [isEditMode]);
 
-    const handleChangeColor = async (id: any, color: string) => {
+    const handleChangeColor = useCallback((id: any, color: string) => {
         if (!isEditMode) return;
 
-        setTaskList((prev: any) =>
+        setTaskList((prev) =>
             prev.map((task: any) =>
                 String(task.id) === String(id) ? { ...task, color } : task
             )
         );
-    };
+    }, [isEditMode]);
 
-    const handleToggle = async (id: any, field: "is_default" | "is_done") => {
+    const handleToggle = useCallback((id: any, field: "is_default" | "is_done") => {
         if (!isEditMode) return;
 
-        setTaskList((prev: any[]) => {
+        setTaskList((prev) => {
             const current = prev.find((t) => String(t.id) === String(id));
             if (!current) return prev;
 
@@ -137,21 +218,23 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 return task;
             });
         });
-    };
+    }, [isEditMode]);
 
-    const startEdit = () => {
+    const startEdit = useCallback(() => {
         setOriginalTaskList(JSON.parse(JSON.stringify(taskList)));
         setDeletedIds([]);
         setIsEditMode(true);
-    };
+    }, [taskList]);
 
-    const handleCancelEdit = () => {
+    const handleCancelEdit = useCallback(() => {
         setDeletedIds([]);
         setIsEditMode(false);
-        getTaskStatus();
-    };
+        fetchTaskStatus();
+    }, [fetchTaskStatus]);
 
-    const handleDoneEdit = async () => {
+    const handleDoneEdit = useCallback(async () => {
+        if (isSaving) return;
+        setIsSaving(true);
         try {
 
             const isTemp = (id: any) => typeof id === 'string' && id.startsWith('temp-');
@@ -202,17 +285,46 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 await Promise.all(updatePromises);
             }
 
-            await getTaskStatus();
+            await fetchTaskStatus();
             setIsEditMode(false);
             setDeletedIds([]);
         } catch (error) {
             console.error('Error saving changes:', error);
             alert('เกิดข้อผิดพลาดในการบันทึกการแก้ไข');
-            await getTaskStatus();
+            await fetchTaskStatus();
             setIsEditMode(false);
             setDeletedIds([]);
+        } finally {
+            setIsSaving(false);
         }
-    };
+    }, [deletedIds, fetchTaskStatus, isSaving, originalTaskList, taskList]);
+
+    const members = useMemo(() => project?.employees ?? [], [project?.employees]);
+    const taskCount = taskList.length;
+    const formattedCreatedAt = useMemo(() => {
+        if (!project?.created_at) return "-";
+        const date = new Date(project.created_at);
+        return date.toLocaleString(undefined, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    }, [project?.created_at]);
+
+    const priorityMeta =
+        PRIORITY_META[project?.priority as keyof typeof PRIORITY_META] ??
+        {
+            label: "ไม่ระบุ (N/A)",
+            className: "bg-gray-100 text-gray-700 border border-gray-300",
+        };
+    const statusMeta =
+        STATUS_META[project?.status as keyof typeof STATUS_META] ??
+        {
+            label: "ไม่ระบุ (N/A)",
+            className: "bg-gray-100 text-gray-700 border border-gray-300",
+        };
 
     const InfoItem = ({ icon: Icon, label, value, variant = "default", chipClass = "" }: any) => (
         <div className="rounded-lg border border-gray-200 bg-white p-3">
@@ -369,135 +481,143 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             width="max-w-4xl"
         >
 
-            <div className="relative mb-4 p-3 bg-gradient-to-r from-primary-100/70 to-green-200/70 rounded-lg shadow-sm overflow-hidden flex-shrink-0">
-                <div className="absolute inset-0">
+            <section className="relative mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-r from-primary-50 via-emerald-50 to-slate-50 p-6 shadow-sm">
+                <div className="absolute inset-y-0 right-0 opacity-80">
                     <Lottie
                         animationData={projectAnimation}
-                        loop={true}
-                        style={{ height: 100, width: 100 }}
-                        className="absolute top-1/2 left-1/4 transform -translate-x-1/3 -translate-y-1/2"
+                        loop
+                        className="pointer-events-none h-40 w-40 translate-x-6"
                     />
                 </div>
-
-                <div className="relative z-10 text-center text-gray-800">
-                    <h2 className="text-xl font-semibold mb-1">{t('project.detail_project_title')}</h2>
-                    <p className="text-gray-600 text-sm mb-3">{t('project.detail_project_desc')}</p>
-                    {taskList && taskList.length > 0 && (
+                <div className="relative z-10 flex flex-col gap-4 text-slate-800">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">
+                            {t("project.detail_project_title")}
+                        </p>
+                        <h2 className="text-2xl font-semibold">
+                            {project?.projectName || t("project.project_name")}
+                        </h2>
+                        <p className="text-sm text-slate-600">
+                            {t("project.detail_project_desc")}
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                            {t("project.table_created_at")} · {formattedCreatedAt}
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                            {t("project.task_status_title")} · {taskCount}
+                        </span>
+                    </div>
+                    {taskCount > 0 && (
                         <Link
                             href={`/boards/view_board/${encodeSingleHashid(project.id)}`}
-                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-green-300 via-emerald-400 to-teal-300 hover:from-green-400 hover:via-emerald-500 hover:to-teal-400 text-white rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
+                            className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:translate-y-0.5"
                         >
                             <FiPlay size={14} />
-                            {t('project.start_planning')}
+                            {t("project.start_planning")}
                         </Link>
                     )}
                 </div>
-
-
-            </div>
+            </section>
 
             <div className="space-y-5">
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {(() => {
-                        const priorityLabel = project?.priority === "urgent"
-                            ? "เร่งด่วน (Urgent)"
-                            : project?.priority === "high"
-                                ? "สูง (High)"
-                                : project?.priority === "normal"
-                                    ? "ปกติ (Normal)"
-                                    : project?.priority === "low"
-                                        ? "ต่ำ (Low)"
-                                        : "-";
-
-                        const priorityClass = project?.priority === "urgent"
-                            ? "bg-red-50 text-red-700 border border-red-200"
-                            : project?.priority === "high"
-                                ? "bg-orange-50 text-orange-700 border border-orange-200"
-                                : project?.priority === "low"
-                                    ? "bg-green-50 text-green-700 border border-green-200"
-                                    : "bg-gray-100 text-gray-700 border border-gray-300";
-
-                        const statusLabel = project?.status === "draft"
-                            ? "ร่าง (Draft)"
-                            : project?.status === "started"
-                                ? "เริ่มต้นแล้ว (Started)"
-                                : project?.status === "completed"
-                                    ? "เสร็จสิ้น (Completed)"
-                                    : project?.status === "cancelled"
-                                        ? "ยกเลิก (Cancelled)"
-                                        : "-";
-
-                        const statusClass = project?.status === "completed"
-                            ? "bg-green-50 text-green-700 border border-green-200"
-                            : project?.status === "started"
-                                ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                : project?.status === "cancelled"
-                                    ? "bg-red-50 text-red-700 border border-red-200"
-                                    : "bg-gray-100 text-gray-700 border border-gray-300";
-
-                        return (
-                            <>
-                                <InfoItem icon={FiHash} label={t('project.join_code')} value={project?.join_code || '-'} variant="code" />
-                                <InfoItem icon={FiCalendar} label={t('project.table_created_at')} value={project?.created_at || '-'} />
-                                <InfoItem icon={FiFlag} label={t('project.table_priority')} value={priorityLabel} variant="chip" chipClass={priorityClass} />
-                                <InfoItem icon={FiFlag} label={t('project.table_status')} value={statusLabel} variant="chip" chipClass={statusClass} />
-                            </>
-                        );
-                    })()}
+                    <InfoItem
+                        icon={FiHash}
+                        label={t("project.join_code")}
+                        value={project?.join_code || "-"}
+                        variant="code"
+                    />
+                    <InfoItem
+                        icon={FiCalendar}
+                        label={t("project.table_created_at")}
+                        value={formattedCreatedAt}
+                    />
+                    <InfoItem
+                        icon={FiFlag}
+                        label={t("project.table_priority")}
+                        value={priorityMeta.label}
+                        variant="chip"
+                        chipClass={priorityMeta.className}
+                    />
+                    <InfoItem
+                        icon={FiFlag}
+                        label={t("project.table_status")}
+                        value={statusMeta.label}
+                        variant="chip"
+                        chipClass={statusMeta.className}
+                    />
                 </div>
 
-                <div className="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm">
-                    <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+                <div className="border border-gray-100 rounded-2xl bg-white shadow-sm">
+                    <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur-sm">
                         <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900">
-                                {t('project.task_status_title')}
+                                {t("project.task_status_title")}
                             </p>
-                            <span className="px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-700 rounded-full border border-gray-200">
-                                {taskList.length}
+                            <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                                {taskCount}
                             </span>
+                            {isEditMode && (
+                                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                                    {t("project.edit")}
+                                </span>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-2">
                             {!isEditMode ? (
                                 <button
                                     onClick={startEdit}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200 transition-colors duration-150 ease-in-out"
-                                >
+                                    className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100"
+                                    >
                                     <FiEdit2 size={14} />
-                                    {t('project.edit')}
+                                    {t("project.edit")}
                                 </button>
                             ) : (
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={handleCancelEdit}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200 transition-colors duration-150 ease-in-out"
+                                        disabled={isSaving}
+                                        className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         <FiX size={14} />
-                                        {t('project.cancel')}
+                                        {t("project.cancel")}
                                     </button>
                                     <button
                                         onClick={handleDoneEdit}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
+                                        disabled={isSaving}
+                                        className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
                                     >
                                         <FiCheck size={14} />
-                                        {t('project.done_status')}
+                                        {isSaving ? t("project.saving") : t("project.done_status")}
                                     </button>
                                 </div>
                             )}
 
                             <button
                                 onClick={handleAddTask}
-                                disabled={!isEditMode}
-                                className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md shadow-sm hover:shadow-md transition-all duration-150 ease-in-out"
+                                disabled={!isEditMode || isSaving}
+                                className="flex items-center gap-1.5 rounded-md bg-green-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300"
                             >
                                 <FiPlus size={14} />
-                                {t('project.add')}
+                                {t("project.add")}
                             </button>
                         </div>
                     </div>
 
-                    {taskList.length > 0 ? (
+                    {isLoadingStatus ? (
+                        <div className="space-y-3 p-4">
+                            {Array.from({ length: 3 }).map((_, idx) => (
+                                <div
+                                    key={`skeleton-${idx}`}
+                                    className="h-20 animate-pulse rounded-xl border border-gray-200 bg-gray-100"
+                                />
+                            ))}
+                        </div>
+                    ) : taskCount > 0 ? (
                         <div className="space-y-4 p-1.5">
                             {isEditMode ? (
                                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -516,11 +636,13 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     ) : (
                         <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 m-6">
                             <FiClipboard className="text-gray-300 mx-auto mb-3" size={48} />
-                            <p className="text-sm text-gray-500 mb-4">ยังไม่มีหัวข้องาน</p>
+                            <p className="text-sm text-gray-500 mb-4">
+                                {t("project.task_logs_empty")}
+                            </p>
                             <button
                                 onClick={handleAddTask}
-                                className="flex items-center gap-1 mx-auto px-4 py-2 rounded-lg text-sm font-medium text-primary-600 border border-primary-300 hover:bg-primary-50 transition"
-                                disabled={!isEditMode}
+                                className="flex items-center gap-1 mx-auto px-4 py-2 rounded-lg text-sm font-medium text-primary-600 border border-primary-300 hover:bg-primary-50 transition disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={!isEditMode || isSaving}
                             >
                                 <FiPlus size={14} /> เพิ่มหัวข้องานแรก
                             </button>
@@ -561,16 +683,16 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     <div className="flex items-center gap-2 mb-4">
                         <FiUsers className="text-primary-500" size={20} />
                         <p className="text-sm font-semibold text-gray-800">
-                            {t('project.list_of_employees')} ({project?.employees?.length || 0})
+                            {t('project.list_of_employees')} ({members.length})
                         </p>
                     </div>
 
-                    {project?.employees?.length > 0 ? (
-                        <div className="max-h-60 overflow-y-auto pr-1 space-y-3">
-                            {project.employees.map((member: any) => (
-                                <div
-                                    key={member.id}
-                                    className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors duration-200 border border-gray-100"
+                            {members.length > 0 ? (
+                                <div className="max-h-60 overflow-y-auto pr-1 space-y-3">
+                                    {members.map((member: any) => (
+                                        <div
+                                            key={member.id}
+                                            className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors duration-200 border border-gray-100"
                                 >
                                     <div className="flex items-center gap-3">
                                         <img
@@ -597,8 +719,8 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                     <span
                                         className={`text-xs px-3 py-1 rounded-full font-medium ${member.status === "joined"
                                             ? "bg-green-50 text-green-700 border border-green-200"
-                                            : "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                                            }`}
+                                                        : "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                                                        }`}
                                     >
                                         {member.status === "joined" ? "Joined" : "Invited"}
                                     </span>
