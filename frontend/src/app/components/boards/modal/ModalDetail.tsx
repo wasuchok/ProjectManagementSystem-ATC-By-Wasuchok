@@ -4,6 +4,7 @@ import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { encodeSingleHashid } from "@/app/utils/hashids";
+import { getImageUrl } from "@/app/utils/imagePath";
 import {
     closestCenter,
     DndContext,
@@ -767,13 +768,14 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     {members.length > 0 ? (
                         <div className="max-h-60 overflow-y-auto pr-1 space-y-3">
                             {members.map((member: any) => (
+
                                 <div
                                     key={member.id}
                                     className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors duration-200 border border-gray-100"
                                 >
                                     <div className="flex items-center gap-3">
                                         <img
-                                            src={member.user_account?.image ? `${member.user_account.image}` : "/user_profile.png"}
+                                            src={member.user_account?.image ? `${getImageUrl(member.user_account?.image)}` : "/user_profile.png"}
                                             alt={member.user_account?.full_name || "User"}
                                             width={40}
                                             height={40}
