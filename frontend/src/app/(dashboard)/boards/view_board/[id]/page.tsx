@@ -3,6 +3,7 @@
 import ModalAddTask from "@/app/components/boards/modal/ModalAddTask";
 import ModalDetailTask from "@/app/components/boards/modal/ModalDetailTask";
 import { useLanguage } from "@/app/contexts/LanguageContext";
+import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { decodeSingleHashid } from "@/app/utils/hashids";
 import { getSocket } from "@/app/utils/socket";
@@ -12,12 +13,12 @@ import {
     Droppable,
     DropResult,
 } from "@hello-pangea/dnd";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     FaPlus
 } from "react-icons/fa";
-import { FiChevronRight, FiClock, FiRefreshCw } from "react-icons/fi";
+import { FiChevronRight, FiClock, FiRefreshCw, FiPlay, FiX } from "react-icons/fi";
 import type { Socket } from "socket.io-client";
 
 type SubtaskAssignee = {
@@ -106,7 +107,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export default function KanbanBoard() {
     const { t } = useLanguage();
+    const { user } = useUser();
     const { id } = useParams();
+    const router = useRouter();
     const [boards, setBoards] = useState<Board[]>([]);
     const [openModalIsDefault, setOpenModalIsDefault] = useState(false);
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -119,6 +122,11 @@ export default function KanbanBoard() {
     const [workload, setWorkload] = useState<Array<{ userId: string; name: string; active: number; late: number; avgProgress: number; score: number; reason: string }>>([]);
     const [isLoadingWorkload, setIsLoadingWorkload] = useState(false);
     const [workloadError, setWorkloadError] = useState<string | null>(null);
+    const [projectStatus, setProjectStatus] = useState<string | null>(null);
+    const [isProjectOwner, setIsProjectOwner] = useState(false);
+    const [accessChecked, setAccessChecked] = useState(false);
+    const [accessDenied, setAccessDenied] = useState(false);
+    const [isUpdatingProjectStatus, setIsUpdatingProjectStatus] = useState(false);
 
     const workloadMax = useMemo(() => {
         let maxActive = 1;
@@ -129,7 +137,16 @@ export default function KanbanBoard() {
         });
         return { maxActive, maxLate };
     }, [workload]);
+    const isDraftStatus = useMemo(
+        () => (projectStatus ?? "").toLowerCase().trim() === "draft",
+        [projectStatus]
+    );
+    const isCancelledStatus = useMemo(
+        () => (projectStatus ?? "").toLowerCase().trim() === "cancelled",
+        [projectStatus]
+    );
     const socketRef = useRef<Socket | null>(null);
+    const draftRedirectRef = useRef(false);
     const statusOptions = useMemo(
         () =>
             boards.map((board) => ({
@@ -656,6 +673,132 @@ export default function KanbanBoard() {
         };
     };
 
+    const fetchProjectMetadata = useCallback(async () => {
+        if (!projectId) {
+            return;
+        }
+
+        try {
+            const response = await apiPrivate.get(`/project/${projectId}`);
+            const payload = response?.data?.data ?? response?.data ?? {};
+
+            const statusValue =
+                payload?.status ??
+                payload?.project_status ??
+                payload?.projectStatus ??
+                payload?.state ??
+                null;
+            setProjectStatus(statusValue ?? null);
+
+            const currentUserId = user?.id != null ? String(user.id) : null;
+            const matchesCurrentUser = (value: any) =>
+                currentUserId != null && value != null && String(value) === currentUserId;
+
+            const ownerCandidates = [
+                payload?.created_by,
+                payload?.createdBy,
+                payload?.owner_id,
+                payload?.ownerId,
+                payload?.owner?.id,
+                payload?.owner?.user_id,
+                payload?.owner?.userId,
+            ];
+
+            let derivedOwner = false;
+
+            for (const candidate of ownerCandidates) {
+                if (typeof candidate === "object" && candidate !== null) {
+                    if (
+                        matchesCurrentUser(candidate.id) ||
+                        matchesCurrentUser(candidate.user_id) ||
+                        matchesCurrentUser(candidate.userId)
+                    ) {
+                        derivedOwner = true;
+                        break;
+                    }
+                    continue;
+                }
+
+                if (matchesCurrentUser(candidate)) {
+                    derivedOwner = true;
+                    break;
+                }
+            }
+
+            if (!derivedOwner && Array.isArray(payload?.tb_project_members)) {
+                derivedOwner = payload.tb_project_members.some((member: any) => {
+                    const hasOwnerRole =
+                        member?.is_owner === true ||
+                        member?.isOwner === true ||
+                        member?.owner === true ||
+                        (typeof member?.role === "string" && member.role.toLowerCase() === "owner") ||
+                        (typeof member?.member_role === "string" && member.member_role.toLowerCase() === "owner") ||
+                        (typeof member?.memberRole === "string" && member.memberRole.toLowerCase() === "owner");
+
+                    if (!hasOwnerRole) {
+                        return false;
+                    }
+
+                    const memberIds = [
+                        member?.user_account_id,
+                        member?.user_account?.id,
+                        member?.user_id,
+                        member?.employee_id,
+                        member?.id,
+                    ];
+
+                    return memberIds.some((idValue) => matchesCurrentUser(idValue));
+                });
+            }
+
+            setIsProjectOwner(derivedOwner);
+
+            const shouldBlock =
+                String(statusValue ?? "").toLowerCase().trim() === "draft" && !derivedOwner;
+
+            setAccessDenied(shouldBlock);
+            if (!shouldBlock) {
+                draftRedirectRef.current = false;
+            }
+            if (shouldBlock && !draftRedirectRef.current) {
+                draftRedirectRef.current = true;
+                if (typeof window !== "undefined") {
+                    alert(t("project.status_draft_no_access"));
+                }
+                router.replace("/boards/view");
+            }
+        } catch (error) {
+            console.error("fetchProjectMetadata error", error);
+            setProjectStatus(null);
+            setIsProjectOwner(false);
+            setAccessDenied(true);
+            if (!draftRedirectRef.current) {
+                draftRedirectRef.current = true;
+                router.replace("/boards/view");
+            }
+        } finally {
+            setAccessChecked(true);
+        }
+    }, [projectId, router, t, user?.id]);
+
+    useEffect(() => {
+        if (!id) {
+            return;
+        }
+
+        if (!projectId) {
+            setAccessChecked(true);
+            setAccessDenied(true);
+            if (!draftRedirectRef.current) {
+                draftRedirectRef.current = true;
+                router.replace("/boards/view");
+            }
+            return;
+        }
+
+        fetchProjectMetadata();
+    }, [id, projectId, fetchProjectMetadata, router]);
+
     const fillTemplate = useCallback(
         (template: string, replacements: Record<string, string>) => {
             return Object.entries(replacements).reduce(
@@ -715,6 +858,34 @@ export default function KanbanBoard() {
             console.log(error);
         }
     }
+
+    const handleUpdateProjectStatus = async (nextStatus: "started" | "cancelled") => {
+        if (!projectId || isUpdatingProjectStatus) return;
+        setIsUpdatingProjectStatus(true);
+
+        const statusLabel =
+            nextStatus === "started" ? t("project.status_started") : t("project.status_cancelled");
+
+        try {
+            await apiPrivate.patch(`/project/${projectId}`, { status: nextStatus });
+            setProjectStatus(nextStatus);
+
+            if (typeof window !== "undefined") {
+                const message = fillTemplate(t("project.status_update_success"), { status: statusLabel });
+                alert(message);
+            }
+
+            await fetchProjectMetadata();
+            await fetchAllStatusTask();
+        } catch (error) {
+            console.error("update project status error", error);
+            if (typeof window !== "undefined") {
+                alert(t("project.status_update_error"));
+            }
+        } finally {
+            setIsUpdatingProjectStatus(false);
+        }
+    };
 
     const fetchTaskLogs = useCallback(async () => {
         if (!projectId) {
@@ -1088,13 +1259,14 @@ export default function KanbanBoard() {
 
 
     useEffect(() => {
+        if (!projectId || !accessChecked || accessDenied) return;
         fetchAllStatusTask();
         fetchProjectMembers();
         fetchTaskLogs();
-    }, [projectId, normalizeTaskData, fetchTaskLogs]);
+    }, [projectId, accessChecked, accessDenied, normalizeTaskData, fetchTaskLogs]);
 
     useEffect(() => {
-        if (!projectId) return;
+        if (!projectId || !accessChecked || accessDenied) return;
         const socket = getSocket();
         socketRef.current = socket;
         if (!socket.connected) socket.connect();
@@ -1114,7 +1286,7 @@ export default function KanbanBoard() {
             socket.emit("leaveProject", projectId);
             socket.off("project:task:moved", handleTaskMoved);
         };
-    }, [projectId, normalizeTaskData, updateBoardsWithTask]);
+    }, [projectId, accessChecked, accessDenied, normalizeTaskData, updateBoardsWithTask]);
 
     useEffect(() => {
         if (activeTab === "logs" || activeTab === "timeline" || activeTab === "gantt") {
@@ -1190,6 +1362,18 @@ export default function KanbanBoard() {
         }
     };
 
+    if (!accessChecked) {
+        return (
+            <div className="flex min-h-[82vh] items-center justify-center rounded-3xl border border-slate-100 bg-slate-50/80 p-6 text-slate-500">
+                {t("loading_data")}
+            </div>
+        );
+    }
+
+    if (accessDenied) {
+        return null;
+    }
+
     return (
         <>
             <style jsx global>{`
@@ -1247,6 +1431,11 @@ export default function KanbanBoard() {
                 }
             `}</style>
             <div className="relative min-h-[82vh] rounded-3xl border border-slate-100 bg-slate-50/80 p-6">
+                {isDraftStatus && isProjectOwner && (
+                    <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 shadow-sm">
+                        {t("project.status_draft_owner_hint")}
+                    </div>
+                )}
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/90 p-1 shadow-sm">
                         {tabOptions.map((option) => (
@@ -1263,6 +1452,32 @@ export default function KanbanBoard() {
                             </button>
                         ))}
                     </div>
+                    {isProjectOwner && (
+                        <div className="flex flex-wrap items-center gap-2">
+                            {isDraftStatus && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleUpdateProjectStatus("started")}
+                                    disabled={isUpdatingProjectStatus}
+                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                                >
+                                    <FiPlay size={14} />
+                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_start_work")}
+                                </button>
+                            )}
+                            {!isCancelledStatus && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleUpdateProjectStatus("cancelled")}
+                                    disabled={isUpdatingProjectStatus}
+                                    className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-400"
+                                >
+                                    <FiX size={14} />
+                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_cancel_project")}
+                                </button>
+                            )}
+                        </div>
+                    )}
                     {activeTab !== "board" && (
                         <button
                             type="button"

@@ -96,6 +96,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
     const [focusedTaskId, setFocusedTaskId] = useState<any>(null);
     const [isLoadingStatus, setIsLoadingStatus] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isUpdatingProjectStatus, setIsUpdatingProjectStatus] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -397,6 +398,46 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             label: "ไม่ระบุ (N/A)",
             className: "bg-gray-100 text-gray-700 border border-gray-300",
         };
+    const normalizedProjectStatus = String(project?.status ?? project?.project_status ?? "")
+        .toLowerCase()
+        .trim();
+    const isDraftStatus = normalizedProjectStatus === "draft";
+    const isCancelledStatus = normalizedProjectStatus === "cancelled";
+    const canShowStartPlanningLink = taskCount > 0 && !isDraftStatus;
+    const shouldShowDraftNotice = taskCount > 0 && isDraftStatus && canManageStatuses;
+
+    const handleUpdateProjectStatus = useCallback(
+        async (nextStatus: "started" | "cancelled") => {
+            if (!project?.id) return;
+
+            setIsUpdatingProjectStatus(true);
+            const statusLabel =
+                nextStatus === "started" ? t("project.status_started") : t("project.status_cancelled");
+
+            try {
+                await apiPrivate.patch(`/project/${project.id}`, { status: nextStatus });
+
+                if (project && typeof project === "object") {
+                    project.status = nextStatus;
+                    project.project_status = nextStatus;
+                }
+
+                if (typeof window !== "undefined") {
+                    const template = t("project.status_update_success");
+                    const message = template.replace("{status}", statusLabel);
+                    alert(message);
+                }
+            } catch (error) {
+                console.error("update project status error", error);
+                if (typeof window !== "undefined") {
+                    alert(t("project.status_update_error"));
+                }
+            } finally {
+                setIsUpdatingProjectStatus(false);
+            }
+        },
+        [project, t]
+    );
 
     const InfoItem = ({ icon: Icon, label, value, variant = "default", chipClass = "" }: any) => (
         <div className="rounded-lg border border-gray-200 bg-white p-3">
@@ -581,7 +622,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                             {t("project.task_status_title")} · {taskCount}
                         </span>
                     </div>
-                    {taskCount > 0 && (
+                    {canShowStartPlanningLink && (
                         <Link
                             href={`/boards/view_board/${encodeSingleHashid(project.id)}`}
                             className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:translate-y-0.5"
@@ -589,6 +630,47 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                             <FiPlay size={14} />
                             {t("project.start_planning")}
                         </Link>
+                    )}
+                    {shouldShowDraftNotice && (
+                        <div className="flex w-fit flex-col gap-1">
+                            <button
+                                type="button"
+                                disabled
+                                className="inline-flex w-fit items-center gap-2 rounded-full bg-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 shadow-lg shadow-slate-900/10 cursor-not-allowed"
+                            >
+                                <FiPlay size={14} />
+                                {t("project.start_planning")}
+                            </button>
+                            <span className="text-xs font-medium text-amber-700">
+                                {t("project.status_draft_owner_hint")}
+                            </span>
+                        </div>
+                    )}
+                    {canManageStatuses && (
+                        <div className="flex flex-wrap gap-2">
+                            {isDraftStatus && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleUpdateProjectStatus("started")}
+                                    disabled={isUpdatingProjectStatus}
+                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                                >
+                                    <FiPlay size={14} />
+                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_start_work")}
+                                </button>
+                            )}
+                            {!isCancelledStatus && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleUpdateProjectStatus("cancelled")}
+                                    disabled={isUpdatingProjectStatus}
+                                    className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-400"
+                                >
+                                    <FiX size={14} />
+                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_cancel_project")}
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
             </section>
