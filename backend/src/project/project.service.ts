@@ -1118,7 +1118,12 @@ export class ProjectService {
         where: {
           project_id,
           user_id: normalizedUserId,
-          status: { in: [tb_project_members_status.joined] },
+          status: {
+            in: [
+              tb_project_members_status.joined,
+              tb_project_members_status.invited,
+            ],
+          },
         },
       });
       isMember = Boolean(member);

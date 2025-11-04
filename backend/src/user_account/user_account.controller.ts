@@ -69,9 +69,23 @@ export class UserAccountController {
   }
 
   @Get('users')
-  @Roles('admin')
-  async readUsers(@Query() query) {
-    return this.userAccountService.readUsers(query);
+  @Roles('admin', 'staff', 'employee')
+  async readUsers(@Query() query, @Req() req: Request) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : '';
+    const roles: string[] = Array.isArray(authUser?.roles)
+      ? authUser.roles.map((role: any) => String(role))
+      : [];
+
+    return this.userAccountService.readUsers(query, {
+      userId,
+      roles,
+    });
   }
 
   @Get('user/:id')

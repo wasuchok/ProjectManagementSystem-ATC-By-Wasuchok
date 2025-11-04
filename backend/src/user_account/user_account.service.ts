@@ -221,8 +221,23 @@ export class UserAccountService {
     return new ApiResponse('ออกจากระบบสำเร็จ', 200, {});
   }
 
-  async readUsers(query: any) {
+  async readUsers(
+    query: any,
+    auth: { userId: string | null; roles: string[] },
+  ) {
     const { page = 1, limit = 10, search = '', status, all } = query;
+
+    const normalizedRoles = Array.isArray(auth?.roles)
+      ? auth.roles.map((role) => String(role).toLowerCase())
+      : [];
+    const isAdmin = normalizedRoles.includes('admin');
+
+    const normalizedUserId =
+      auth?.userId != null ? String(auth.userId) : null;
+
+    if (!normalizedUserId) {
+      throw new UnauthorizedException('ไม่พบข้อมูลผู้ใช้งาน');
+    }
 
     const where: any = {
       AND: [
@@ -241,13 +256,19 @@ export class UserAccountService {
       ],
     };
 
+    if (!isAdmin) {
+      where.AND.push({ user_id: normalizedUserId });
+    }
+
     let effectivePage: number;
     let effectiveLimit: number;
     let effectiveTotalPages: number;
     let users: any[];
     let total: number;
 
-    if (all === 'true') {
+    const allowAll = isAdmin && all === 'true';
+
+    if (allowAll) {
       [users, total] = await this.prisma.$transaction([
         this.prisma.user_account.findMany({
           where,
@@ -259,11 +280,11 @@ export class UserAccountService {
       effectiveLimit = total;
       effectiveTotalPages = 1;
     } else {
-      const skip = (page - 1) * limit;
+      const skip = (Number(page) - 1) * Number(limit);
       [users, total] = await this.prisma.$transaction([
         this.prisma.user_account.findMany({
           where,
-          skip: Number(skip),
+          skip: skip < 0 ? 0 : skip,
           take: Number(limit),
           orderBy: { create_date: 'desc' },
         }),
@@ -271,7 +292,8 @@ export class UserAccountService {
       ]);
       effectivePage = Number(page);
       effectiveLimit = Number(limit);
-      effectiveTotalPages = Math.ceil(total / Number(limit));
+      effectiveTotalPages =
+        effectiveLimit > 0 ? Math.ceil(total / effectiveLimit) : 1;
     }
 
     const sanitizedUsers = users.map(
@@ -279,7 +301,7 @@ export class UserAccountService {
     );
 
     const responseData =
-      all === 'true'
+      allowAll
         ? sanitizedUsers
         : {
             total,
