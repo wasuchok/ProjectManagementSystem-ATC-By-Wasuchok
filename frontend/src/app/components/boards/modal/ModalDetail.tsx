@@ -273,7 +273,13 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
     const isDraftStatus = normalizedProjectStatus === "draft";
     const isCancelledStatus = normalizedProjectStatus === "cancelled";
     const isCompletedStatus = normalizedProjectStatus === "completed";
-    const canShowStartPlanningLink = taskCount > 0 && !isDraftStatus && !isCompletedStatus;
+    const canShowBoardLink = taskCount > 0 && !isDraftStatus;
+    const boardLinkLabel = isCompletedStatus
+        ? t("project.view_project_history")
+        : isCancelledStatus
+            ? t("project.view_project_history")
+            : t("project.start_planning");
+    const BoardLinkIcon = (isCompletedStatus || isCancelledStatus) ? FiClipboard : FiPlay;
     const shouldShowDraftNotice = taskCount > 0 && isDraftStatus && canManageStatuses;
     const canInviteMembers = canManageMembers && !isCancelledStatus && !isCompletedStatus;
     const canRemoveMembers = canManageMembers && !isCancelledStatus && !isCompletedStatus;
@@ -773,13 +779,13 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                             {t("project.task_status_title")} · {taskCount}
                         </span>
                     </div>
-                    {canShowStartPlanningLink && (
+                    {canShowBoardLink && (
                         <Link
                             href={`/boards/view_board/${encodeSingleHashid(project.id)}`}
                             className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:translate-y-0.5"
                         >
-                            <FiPlay size={14} />
-                            {t("project.start_planning")}
+                            <BoardLinkIcon size={14} />
+                            {boardLinkLabel}
                         </Link>
                     )}
                     {shouldShowDraftNotice && (

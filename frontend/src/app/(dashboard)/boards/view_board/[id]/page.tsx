@@ -18,7 +18,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "re
 import {
     FaPlus
 } from "react-icons/fa";
-import { FiChevronRight, FiClock, FiRefreshCw, FiPlay, FiX } from "react-icons/fi";
+import { FiChevronRight, FiClock, FiRefreshCw, FiPlay, FiX, FiCheck } from "react-icons/fi";
 import type { Socket } from "socket.io-client";
 
 type SubtaskAssignee = {
@@ -145,6 +145,18 @@ export default function KanbanBoard() {
         () => (projectStatus ?? "").toLowerCase().trim() === "cancelled",
         [projectStatus]
     );
+    const isCompletedStatus = useMemo(
+        () => (projectStatus ?? "").toLowerCase().trim() === "completed",
+        [projectStatus]
+    );
+    const isReadOnlyStatus = useMemo(
+        () => isCancelledStatus || isCompletedStatus,
+        [isCancelledStatus, isCompletedStatus]
+    );
+    const canManageTasks = useMemo(
+        () => isProjectOwner && !isReadOnlyStatus,
+        [isProjectOwner, isReadOnlyStatus]
+    );
     const socketRef = useRef<Socket | null>(null);
     const draftRedirectRef = useRef(false);
     const statusOptions = useMemo(
@@ -191,6 +203,9 @@ export default function KanbanBoard() {
     }, [id]);
 
     const handleTaskProgressChanged = useCallback((taskId: string, progressPercent: number) => {
+        if (isReadOnlyStatus) {
+            return;
+        }
         const clampedProgress = Math.min(100, Math.max(0, progressPercent));
         setBoards((prevBoards) =>
             prevBoards.map((board) => ({
@@ -214,9 +229,12 @@ export default function KanbanBoard() {
                 }
                 : prev
         );
-    }, []);
+    }, [isReadOnlyStatus]);
 
     const handleSubtaskUpsert = useCallback((taskId: string, subtask: Subtask) => {
+        if (isReadOnlyStatus) {
+            return;
+        }
         const boardMatch = subtask.statusId
             ? boards.find((board) => board.id === subtask.statusId)
             : undefined;
@@ -297,7 +315,7 @@ export default function KanbanBoard() {
                 console.log(e);
             }
         })();
-    }, [boards]);
+    }, [boards, isReadOnlyStatus]);
 
     const priorityConfig: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
         low: {
@@ -859,12 +877,16 @@ export default function KanbanBoard() {
         }
     }
 
-    const handleUpdateProjectStatus = async (nextStatus: "started" | "cancelled") => {
+    const handleUpdateProjectStatus = async (nextStatus: "started" | "cancelled" | "completed") => {
         if (!projectId || isUpdatingProjectStatus) return;
         setIsUpdatingProjectStatus(true);
 
         const statusLabel =
-            nextStatus === "started" ? t("project.status_started") : t("project.status_cancelled");
+            nextStatus === "started"
+                ? t("project.status_started")
+                : nextStatus === "completed"
+                    ? t("project.status_completed")
+                    : t("project.status_cancelled");
 
         try {
             await apiPrivate.patch(`/project/${projectId}`, { status: nextStatus });
@@ -1297,10 +1319,17 @@ export default function KanbanBoard() {
         }
     }, [activeTab, fetchTaskLogs, fetchWorkload]);
 
+    useEffect(() => {
+        if (!canManageTasks) {
+            setOpenModalIsDefault(false);
+        }
+    }, [canManageTasks]);
+
 
     const handleDragEnd = async (result: DropResult) => {
         const { source, destination } = result;
         if (!destination) return;
+        if (!canManageTasks) return;
 
         if (source.droppableId === destination.droppableId && source.index === destination.index) {
             return;
@@ -1436,6 +1465,11 @@ export default function KanbanBoard() {
                         {t("project.status_draft_owner_hint")}
                     </div>
                 )}
+                {isReadOnlyStatus && (
+                    <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm">
+                        {t("project.status_readonly_hint")}
+                    </div>
+                )}
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/90 p-1 shadow-sm">
                         {tabOptions.map((option) => (
@@ -1465,7 +1499,18 @@ export default function KanbanBoard() {
                                     {isUpdatingProjectStatus ? t("project.saving") : t("project.action_start_work")}
                                 </button>
                             )}
-                            {!isCancelledStatus && (
+                            {!isDraftStatus && !isReadOnlyStatus && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleUpdateProjectStatus("completed")}
+                                    disabled={isUpdatingProjectStatus}
+                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                                >
+                                    <FiCheck size={14} />
+                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_complete_project")}
+                                </button>
+                            )}
+                            {!isDraftStatus && !isCancelledStatus && !isCompletedStatus && (
                                 <button
                                     type="button"
                                     onClick={() => handleUpdateProjectStatus("cancelled")}
@@ -1497,7 +1542,7 @@ export default function KanbanBoard() {
                                 const tasks = board.tasks ?? [];
 
                                 return (
-                                    <Droppable droppableId={board.id} key={board.id}>
+                                    <Droppable droppableId={board.id} key={board.id} isDropDisabled={!canManageTasks}>
                                         {(provided, snapshot) => (
                                             <div
                                                 ref={provided.innerRef}
@@ -1534,7 +1579,7 @@ export default function KanbanBoard() {
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    {board.isDefault && (
+                                                    {board.isDefault && canManageTasks && (
                                                         <button
                                                             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-500"
                                                             type="button"
@@ -1574,6 +1619,7 @@ export default function KanbanBoard() {
                                                                 key={task.id}
                                                                 draggableId={task.id}
                                                                 index={index}
+                                                                isDragDisabled={!canManageTasks}
                                                             >
                                                                 {(provided, snapshot) => (
                                                                     <div
@@ -2276,6 +2322,7 @@ export default function KanbanBoard() {
                         onSubtaskUpdated={handleSubtaskUpsert}
                         onSubtaskCreated={handleSubtaskUpsert}
                         onTaskProgressChanged={handleTaskProgressChanged}
+                        projectReadOnly={isReadOnlyStatus}
                     />
                 )}
 

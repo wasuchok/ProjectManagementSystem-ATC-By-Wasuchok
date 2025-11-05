@@ -158,6 +158,7 @@ type ModalDetailTaskProps = {
     onTaskProgressChanged?: (taskId: string, progressPercent: number) => void;
     onSubtaskUpdated?: (taskId: string, subtask: SubtaskSummary) => void;
     onSubtaskCreated?: (taskId: string, subtask: SubtaskSummary) => void;
+    projectReadOnly?: boolean;
 };
 
 const ModalDetailTask = ({
@@ -173,8 +174,10 @@ const ModalDetailTask = ({
     onTaskProgressChanged,
     onSubtaskUpdated,
     onSubtaskCreated,
+    projectReadOnly = false,
 }: ModalDetailTaskProps) => {
     const { t } = useLanguage()
+    const isReadOnly = Boolean(projectReadOnly);
     const resolveLabel = (key: string, fallback: string) => {
         const translated = t(key);
         return translated && translated !== key ? translated : fallback;
@@ -470,6 +473,13 @@ const ModalDetailTask = ({
     }, [selectedTask?.id, buildDefaultFormValues]);
 
     useEffect(() => {
+        if (isReadOnly) {
+            setShowAddForm(false);
+            setEditingSubtaskId(null);
+        }
+    }, [isReadOnly]);
+
+    useEffect(() => {
         if (!isTaskModalOpen || !selectedTask?.id) {
             return;
         }
@@ -541,6 +551,9 @@ const ModalDetailTask = ({
     };
 
     const handleToggleAddForm = () => {
+        if (isReadOnly) {
+            return;
+        }
         if (showAddForm) {
             resetForm();
         }
@@ -553,6 +566,10 @@ const ModalDetailTask = ({
 
     const handleCreateSubtask = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (isReadOnly) {
+            setFormError(t("project.status_readonly_hint"));
+            return;
+        }
         const trimmedTitle = formValues.title.trim();
 
         if (!trimmedTitle) {
@@ -630,6 +647,9 @@ const ModalDetailTask = ({
     }, [availableAssignees, formValues.assigneeIds]);
 
     const handleStartEdit = (subtask: SubtaskSummary) => {
+        if (isReadOnly) {
+            return;
+        }
         setEditingSubtaskId(subtask.id);
         setEditProgressPercent(String(getProgressValue(subtask.progressPercent)));
         setEditStatusId(subtask.statusId ?? (statusOptions[0]?.id ?? null));
@@ -644,6 +664,7 @@ const ModalDetailTask = ({
     };
 
     const handleCommentInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+        if (isReadOnly) return;
         const value = event.target.value;
         setNewCommentMessage(value);
         if (!selectedTask?.id || !currentUserId) return;
@@ -665,6 +686,10 @@ const ModalDetailTask = ({
     const handleSubmitComment = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!selectedTask?.id) return;
+        if (isReadOnly) {
+            setCommentSubmitError(t("project.status_readonly_hint"));
+            return;
+        }
 
         const trimmedMessage = newCommentMessage.trim();
         if (!trimmedMessage) return;
@@ -697,6 +722,10 @@ const ModalDetailTask = ({
     const handleUpdateSubtask = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!editingSubtaskId) return;
+        if (isReadOnly) {
+            setUpdateError(t("project.status_readonly_hint"));
+            return;
+        }
 
         const progressNumber = Number(editProgressPercent);
         if (Number.isNaN(progressNumber)) {
@@ -751,6 +780,11 @@ const ModalDetailTask = ({
                 width="max-w-lg"
             >
                 <div className="space-y-5 text-sm text-slate-600">
+                    {isReadOnly && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                            {t("project.status_readonly_hint")}
+                        </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-2">
                         {(() => {
                             const priorityMeta = selectedTask.priority ? priorityConfig[selectedTask.priority] : undefined;
@@ -858,17 +892,19 @@ const ModalDetailTask = ({
                                 <FiList size={14} />
                                 {t('project.subtask')}
                             </div>
-                            <button
-                                type="button"
-                                onClick={handleToggleAddForm}
-                                className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600 transition hover:border-primary-300 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1"
-                            >
-                                <FiPlus size={12} />
-                                {showAddForm ? t("project.status_cancelled") : t("project.add_subtask")}
-                            </button>
+                            {!isReadOnly && (
+                                <button
+                                    type="button"
+                                    onClick={handleToggleAddForm}
+                                    className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600 transition hover:border-primary-300 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1"
+                                >
+                                    <FiPlus size={12} />
+                                    {showAddForm ? t("project.status_cancelled") : t("project.add_subtask")}
+                                </button>
+                            )}
                         </div>
 
-                        {showAddForm && (
+                        {!isReadOnly && showAddForm && (
                             <form className="mt-4 space-y-4" onSubmit={handleCreateSubtask}>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1063,6 +1099,7 @@ const ModalDetailTask = ({
                                         .map((assignee) => assignee.fullName ?? assignee.userId)
                                         .filter((value): value is string => Boolean(value?.trim()));
                                     const canManage =
+                                        !isReadOnly &&
                                         !!currentUserId &&
                                         (subtask.assignees ?? []).some(
                                             (assignee) => assignee.userId === currentUserId
@@ -1309,15 +1346,20 @@ const ModalDetailTask = ({
                                 onBlur={handleCommentInputBlur}
                                 placeholder={commentsPlaceholder}
                                 className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                                disabled={isSubmittingComment}
+                                disabled={isSubmittingComment || isReadOnly}
                             />
                             {commentSubmitError && (
                                 <p className="text-xs font-semibold text-rose-500">{commentSubmitError}</p>
                             )}
+                            {isReadOnly && (
+                                <p className="text-xs font-medium text-slate-500">
+                                    {t("project.status_readonly_hint")}
+                                </p>
+                            )}
                             <div className="flex items-center justify-end">
                                 <button
                                     type="submit"
-                                    disabled={isSubmittingComment || !newCommentMessage.trim()}
+                                    disabled={isSubmittingComment || !newCommentMessage.trim() || isReadOnly}
                                     className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1 disabled:cursor-not-allowed disabled:bg-primary-300"
                                 >
                                     {isSubmittingComment ? commentsSubmittingLabel : commentsSubmitLabel}
