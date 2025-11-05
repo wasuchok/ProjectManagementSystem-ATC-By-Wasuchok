@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma, tb_project_members_status, $Enums } from 'generated/prisma';
 import { ApiResponse } from 'src/common/dto/api-response.dto';
@@ -1139,6 +1140,265 @@ export class ProjectService {
     };
 
     return new ApiResponse('success', 200, data);
+  }
+
+  async addProjectMember(
+    project_id: number,
+    target: { user_id?: string | null; username?: string | null },
+    actorUserId: string | null,
+    roles: string[],
+  ) {
+    if (!project_id) {
+      throw new BadRequestException('กรุณาระบุโปรเจกต์');
+    }
+    if (!actorUserId) {
+      throw new UnauthorizedException('ไม่พบข้อมูลผู้ใช้งาน');
+    }
+
+    const providedUserId =
+      target?.user_id != null ? String(target.user_id).trim() : null;
+    const providedUsername =
+      target?.username != null ? String(target.username).trim() : null;
+
+    if (!providedUserId && !providedUsername) {
+      throw new BadRequestException('กรุณาระบุชื่อผู้ใช้ที่ต้องการเชิญ');
+    }
+
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      select: {
+        id: true,
+        name: true,
+        created_by: true,
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException('ไม่พบโปรเจกต์ที่ระบุ');
+    }
+
+    const normalizedActorId = String(actorUserId);
+    const isAdmin = Array.isArray(roles)
+      ? roles.map((role) => String(role).toLowerCase()).includes('admin')
+      : false;
+    const isOwner =
+      project.created_by != null &&
+      String(project.created_by) === normalizedActorId;
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('คุณไม่มีสิทธิ์เชิญสมาชิกในโปรเจกต์นี้');
+    }
+
+    let targetUser =
+      providedUserId != null
+        ? await this.prisma.user_account.findUnique({
+            where: { user_id: providedUserId },
+            select: {
+              user_id: true,
+              username: true,
+              full_name: true,
+              email: true,
+              department: true,
+              position: true,
+              image: true,
+            },
+          })
+        : null;
+
+    if (!targetUser && providedUsername) {
+      targetUser = await this.prisma.user_account.findFirst({
+        where: {
+          username: {
+            equals: providedUsername,
+            mode: 'insensitive',
+          },
+        },
+        select: {
+          user_id: true,
+          username: true,
+          full_name: true,
+          email: true,
+          department: true,
+          position: true,
+          image: true,
+        },
+      });
+    }
+
+    if (!targetUser) {
+      throw new NotFoundException('ไม่พบผู้ใช้งานที่ต้องการเชิญ');
+    }
+
+    const targetUserId = String(targetUser.user_id);
+
+    if (
+      project.created_by != null &&
+      String(project.created_by) === targetUserId
+    ) {
+      throw new BadRequestException('ผู้สร้างโปรเจกต์อยู่ในโปรเจกต์นี้อยู่แล้ว');
+    }
+
+    const existingMember = await this.prisma.tb_project_members.findFirst({
+      where: {
+        project_id,
+        user_id: targetUserId,
+      },
+    });
+
+    let memberRecord;
+    if (existingMember) {
+      if (existingMember.status === tb_project_members_status.joined) {
+        return new ApiResponse(
+          'สมาชิกนี้อยู่ในโปรเจกต์แล้ว',
+          200,
+          existingMember,
+        );
+      }
+
+      memberRecord = await this.prisma.tb_project_members.update({
+        where: { id: existingMember.id },
+        data: {
+          status: tb_project_members_status.invited,
+          invited_by: normalizedActorId,
+          left_at: null,
+        },
+      });
+    } else {
+      memberRecord = await this.prisma.tb_project_members.create({
+        data: {
+          project_id,
+          user_id: targetUserId,
+          status: tb_project_members_status.invited,
+          invited_by: normalizedActorId,
+        },
+      });
+    }
+
+    const refreshedMember =
+      await this.prisma.tb_project_members.findUnique({
+        where: { id: memberRecord.id },
+        include: { user_account: true },
+      });
+
+    const inviteCount = await this.prisma.tb_project_members.count({
+      where: {
+        user_id: targetUserId,
+        status: tb_project_members_status.invited,
+      },
+    });
+
+    this.eventsGateway.sendToUser(targetUserId, 'invitedCountUpdated', {
+      inviteCount,
+      projectId: project.id,
+      projectName: project.name,
+      message: `คุณได้รับคำเชิญเข้าร่วมโปรเจกต์ ${project.name}`,
+    });
+
+    this.eventsGateway.broadcastToProject(project_id, 'project:member:added', {
+      projectId: project_id,
+      userId: targetUserId,
+    });
+
+    return new ApiResponse(
+      existingMember
+        ? 'อัปเดตคำเชิญสมาชิกเรียบร้อย'
+        : 'เชิญสมาชิกเข้าร่วมโปรเจกต์เรียบร้อย',
+      existingMember ? 200 : 201,
+      refreshedMember ?? memberRecord,
+    );
+  }
+
+  async removeProjectMember(
+    project_id: number,
+    targetUserId: string,
+    actorUserId: string | null,
+    roles: string[],
+  ) {
+    if (!project_id) {
+      throw new BadRequestException('กรุณาระบุโปรเจกต์');
+    }
+    if (!targetUserId) {
+      throw new BadRequestException('กรุณาระบุสมาชิกที่ต้องการลบ');
+    }
+    if (!actorUserId) {
+      throw new UnauthorizedException('ไม่พบข้อมูลผู้ใช้งาน');
+    }
+
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      select: {
+        id: true,
+        name: true,
+        created_by: true,
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException('ไม่พบโปรเจกต์ที่ระบุ');
+    }
+
+    const normalizedActorId = String(actorUserId);
+    const isAdmin = Array.isArray(roles)
+      ? roles.map((role) => String(role).toLowerCase()).includes('admin')
+      : false;
+    const isOwner =
+      project.created_by != null &&
+      String(project.created_by) === normalizedActorId;
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('คุณไม่มีสิทธิ์ลบสมาชิกในโปรเจกต์นี้');
+    }
+
+    if (
+      project.created_by != null &&
+      String(project.created_by) === String(targetUserId)
+    ) {
+      throw new BadRequestException('ไม่สามารถลบผู้สร้างโปรเจกต์ออกได้');
+    }
+
+    const member = await this.prisma.tb_project_members.findFirst({
+      where: {
+        project_id,
+        user_id: targetUserId,
+      },
+    });
+
+    if (!member) {
+      throw new NotFoundException('ไม่พบสมาชิกในโปรเจกต์นี้');
+    }
+
+    await this.prisma.tb_project_members.delete({
+      where: { id: member.id },
+    });
+
+    if (member.status === tb_project_members_status.invited) {
+      const inviteCount = await this.prisma.tb_project_members.count({
+        where: {
+          user_id: targetUserId,
+          status: tb_project_members_status.invited,
+        },
+      });
+      this.eventsGateway.sendToUser(targetUserId, 'invitedCountUpdated', {
+        inviteCount,
+        projectId: project.id,
+        projectName: project.name,
+        message: `คำเชิญในโปรเจกต์ ${project.name} ถูกยกเลิก`,
+      });
+    }
+
+    this.eventsGateway.broadcastToProject(
+      project_id,
+      'project:member:removed',
+      {
+        projectId: project_id,
+        userId: targetUserId,
+      },
+    );
+
+    return new ApiResponse('ลบสมาชิกออกจากโปรเจกต์แล้ว', 200, {
+      projectId: project_id,
+      userId: targetUserId,
+    });
   }
 
   async updateProjectStatus(

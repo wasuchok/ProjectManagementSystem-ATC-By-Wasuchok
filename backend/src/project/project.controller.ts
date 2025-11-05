@@ -273,6 +273,61 @@ export class ProjectController {
     );
   }
 
+  @Post('/:project_id/members')
+  @Roles('admin', 'staff', 'employee')
+  async addProjectMember(
+    @Param('project_id') project_id: string,
+    @Body() body: any,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const actorId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : null;
+    const roles: string[] = Array.isArray(authUser?.roles)
+      ? authUser.roles.map((role: any) => String(role))
+      : [];
+
+    return this.projectService.addProjectMember(
+      Number(project_id),
+      {
+        username: body?.username,
+        user_id: body?.user_id,
+      },
+      actorId,
+      roles,
+    );
+  }
+
+  @Delete('/:project_id/members/:user_id')
+  @Roles('admin', 'staff', 'employee')
+  async removeProjectMember(
+    @Param('project_id') project_id: string,
+    @Param('user_id') user_id: string,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const actorId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : null;
+    const roles: string[] = Array.isArray(authUser?.roles)
+      ? authUser.roles.map((role: any) => String(role))
+      : [];
+
+    return this.projectService.removeProjectMember(
+      Number(project_id),
+      user_id,
+      actorId,
+      roles,
+    );
+  }
+
   @Patch('/:project_id')
   @Roles('admin', 'staff', 'employee')
   async updateProjectStatus(

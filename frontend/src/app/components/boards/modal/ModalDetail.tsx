@@ -38,6 +38,7 @@ import {
     FiHash,
     FiPlay,
     FiPlus,
+    FiUserPlus,
     FiTrash2,
     FiUsers,
     FiX,
@@ -97,6 +98,10 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
     const [isLoadingStatus, setIsLoadingStatus] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isUpdatingProjectStatus, setIsUpdatingProjectStatus] = useState(false);
+    const [members, setMembers] = useState<any[]>(Array.isArray(project?.employees) ? project.employees : []);
+    const [newMemberUsername, setNewMemberUsername] = useState("");
+    const [isInvitingMember, setIsInvitingMember] = useState(false);
+    const [removingMemberIds, setRemovingMemberIds] = useState<Record<string, boolean>>({});
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -130,7 +135,18 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         }
     }, [open, fetchTaskStatus]);
 
-    const canManageStatuses = useMemo(() => {
+    useEffect(() => {
+        setMembers(Array.isArray(project?.employees) ? project.employees : []);
+    }, [project?.employees]);
+
+    const isAdmin = useMemo(
+        () =>
+            Array.isArray(user?.roles) &&
+            user.roles.some((role) => role && role.toLowerCase() === "admin"),
+        [user?.roles]
+    );
+
+    const isProjectOwner = useMemo(() => {
         if (project?.isOwner !== undefined) {
             return Boolean(project.isOwner);
         }
@@ -197,6 +213,34 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
             return memberIds.some((id) => matchesCurrentUser(id));
         });
     }, [project, user?.id]);
+
+    const canManageStatuses = useMemo(
+        () => isAdmin || isProjectOwner,
+        [isAdmin, isProjectOwner]
+    );
+
+    const canManageMembers = useMemo(
+        () => isAdmin || isProjectOwner,
+        [isAdmin, isProjectOwner]
+    );
+
+    const ownerUserId = useMemo(() => {
+        const directOwner =
+            project?.owner?.user_id ??
+            project?.owner?.id ??
+            project?.created_by ??
+            project?.createdBy ??
+            project?.owner_id ??
+            project?.ownerId;
+        return directOwner != null ? String(directOwner) : null;
+    }, [
+        project?.createdBy,
+        project?.created_by,
+        project?.owner?.id,
+        project?.owner?.user_id,
+        project?.ownerId,
+        project?.owner_id,
+    ]);
 
     const handleDragEnd = useCallback((event: any) => {
         const { active, over } = event;
@@ -372,7 +416,107 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         }
     }, [canManageStatuses, deletedIds, fetchTaskStatus, isSaving, originalTaskList, taskList]);
 
-    const members = useMemo(() => project?.employees ?? [], [project?.employees]);
+    const handleInviteMember = useCallback(async () => {
+        if (!canManageMembers || isInvitingMember || !project?.id) return;
+        const trimmedUsername = newMemberUsername.trim();
+        if (!trimmedUsername) return;
+
+        const normalizedUsername = trimmedUsername.toLowerCase();
+
+        const existing = members.some((member: any) => {
+            const username = member?.user_account?.username;
+            if (username && username.toLowerCase() === normalizedUsername) {
+                return true;
+            }
+            const memberUserId =
+                member?.user_id ??
+                member?.user_account?.user_id ??
+                member?.user_account_id ??
+                member?.id;
+            return (
+                memberUserId != null && String(memberUserId) === trimmedUsername
+            );
+        });
+
+        if (existing) {
+            alert("สมาชิกนี้อยู่ในโปรเจกต์แล้ว");
+            return;
+        }
+
+        setIsInvitingMember(true);
+        try {
+            const response = await apiPrivate.post(`/project/${project.id}/members`, {
+                username: trimmedUsername,
+            });
+            const added = response?.data?.data;
+            if (added) {
+                const addedUserId =
+                    added?.user_id ??
+                    added?.user_account?.user_id ??
+                    added?.id ??
+                    null;
+
+                setMembers((prev) => {
+                    const filtered = prev.filter((member: any) => {
+                        const memberUserId =
+                            member?.user_id ??
+                            member?.user_account?.user_id ??
+                            member?.user_account_id ??
+                            member?.id;
+                        return (
+                            memberUserId == null ||
+                            (addedUserId != null &&
+                                String(memberUserId) !== String(addedUserId))
+                        );
+                    });
+                    return [...filtered, added];
+                });
+            }
+            setNewMemberUsername("");
+        } catch (error) {
+            console.error("invite member error", error);
+            alert("ไม่สามารถเชิญสมาชิกได้");
+        } finally {
+            setIsInvitingMember(false);
+        }
+    }, [canManageMembers, isInvitingMember, project?.id, newMemberUsername, members]);
+
+    const handleRemoveMember = useCallback(
+        async (memberId: string) => {
+            if (!canManageMembers || !project?.id) return;
+            if (!memberId || memberId === ownerUserId) return;
+
+            if (!window.confirm("ยืนยันการลบสมาชิกคนนี้หรือไม่?")) {
+                return;
+            }
+
+            setRemovingMemberIds((prev) => ({ ...prev, [memberId]: true }));
+            try {
+                await apiPrivate.delete(`/project/${project.id}/members/${memberId}`);
+                setMembers((prev) =>
+                    prev.filter((member: any) => {
+                        const memberUserId =
+                            member?.user_id ??
+                            member?.user_account?.user_id ??
+                            member?.user_account_id ??
+                            member?.id;
+                        return memberUserId == null || String(memberUserId) !== memberId;
+                    })
+                );
+            } catch (error) {
+                console.error("remove member error", error);
+                alert("ไม่สามารถลบสมาชิกได้");
+            } finally {
+                setRemovingMemberIds((prev) => {
+                    const next = { ...prev };
+                    delete next[memberId];
+                    return next;
+                });
+            }
+        },
+        [canManageMembers, project?.id, ownerUserId]
+    );
+
     const taskCount = taskList.length;
     const formattedCreatedAt = useMemo(() => {
         if (!project?.created_at) return "-";
@@ -847,46 +991,110 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                         </p>
                     </div>
 
+                    {canManageMembers && (
+                        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center">
+                            <TextField
+                                value={newMemberUsername}
+                                onChange={(e) => setNewMemberUsername(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleInviteMember();
+                                    }
+                                }}
+                                placeholder="กรอกชื่อผู้ใช้งาน (username)"
+                                className="md:w-64"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleInviteMember}
+                                disabled={isInvitingMember || !newMemberUsername.trim()}
+                                className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-primary-300"
+                            >
+                                <FiUserPlus size={16} />
+                                {isInvitingMember ? t("project.saving") : t("project.add")}
+                            </button>
+                        </div>
+                    )}
+
                     {members.length > 0 ? (
                         <div className="max-h-60 overflow-y-auto pr-1 space-y-3">
-                            {members.map((member: any) => (
+                            {members.map((member: any) => {
+                                const memberUserIdRaw =
+                                    member?.user_id ??
+                                    member?.user_account?.user_id ??
+                                    member?.user_account_id ??
+                                    member?.id ??
+                                    "";
+                                const memberUserId = String(memberUserIdRaw);
+                                const key =
+                                    member?.id ??
+                                    member?.user_id ??
+                                    member?.user_account?.user_id ??
+                                    memberUserId;
+                                const isOwnerMember =
+                                    ownerUserId != null &&
+                                    memberUserId &&
+                                    ownerUserId === memberUserId;
+                                const isRemoving = Boolean(removingMemberIds[memberUserId]);
+                                const avatarUrl = member.user_account?.image
+                                    ? getImageUrl(member.user_account?.image)
+                                    : "/user_profile.png";
 
-                                <div
-                                    key={member.id}
-                                    className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors duration-200 border border-gray-100"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <img
-                                            src={member.user_account?.image ? `${getImageUrl(member.user_account?.image)}` : "/user_profile.png"}
-                                            alt={member.user_account?.full_name || "User"}
-                                            width={40}
-                                            height={40}
-                                            className="rounded-full object-cover border border-gray-200"
-                                            onError={(e) => {
-                                                (e.target as HTMLImageElement).src = "/user_profile.png";
-                                            }}
-                                        />
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-800">
-                                                {member.user_account?.full_name || "-"}
-                                            </p>
-                                            <p className="text-xs text-gray-600 flex items-center gap-1">
-                                                <span>{member.user_account?.department || "-"}</span>
-                                                <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
-                                                {member.status === "joined" ? "เข้าร่วมแล้ว" : member.status === "invited" ? "รอเข้าร่วม" : member.status}
-                                            </p>
+                                return (
+                                    <div
+                                        key={key}
+                                        className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors duration-200 border border-gray-100"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <img
+                                                src={avatarUrl}
+                                                alt={member.user_account?.full_name || "User"}
+                                                width={40}
+                                                height={40}
+                                                className="rounded-full object-cover border border-gray-200"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).src = "/user_profile.png";
+                                                }}
+                                            />
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-800">
+                                                    {member.user_account?.full_name || "-"}
+                                                </p>
+                                                <p className="text-xs text-gray-600 flex items-center gap-1">
+                                                    <span>{member.user_account?.department || "-"}</span>
+                                                    <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
+                                                    {member.status === "joined"
+                                                        ? "เข้าร่วมแล้ว"
+                                                        : member.status === "invited"
+                                                            ? "รอเข้าร่วม"
+                                                            : member.status}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span
+                                                className={`text-xs px-3 py-1 rounded-full font-medium ${member.status === "joined"
+                                                    ? "bg-green-50 text-green-700 border border-green-200"
+                                                    : "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                                                    }`}
+                                            >
+                                                {member.status === "joined" ? "Joined" : "Invited"}
+                                            </span>
+                                            {canManageMembers && !isOwnerMember && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveMember(memberUserId)}
+                                                    disabled={isRemoving}
+                                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    <FiTrash2 size={16} />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
-                                    <span
-                                        className={`text-xs px-3 py-1 rounded-full font-medium ${member.status === "joined"
-                                            ? "bg-green-50 text-green-700 border border-green-200"
-                                            : "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                                            }`}
-                                    >
-                                        {member.status === "joined" ? "Joined" : "Invited"}
-                                    </span>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="text-center py-8">
