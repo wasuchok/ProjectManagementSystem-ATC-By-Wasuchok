@@ -1113,7 +1113,19 @@ export class ProjectService {
       project.created_by != null &&
       String(project.created_by) === normalizedUserId;
 
-    if (!isOwner && !isAdmin) {
+    let isJoinedMember = false;
+    if (!isOwner && !isAdmin && normalizedUserId) {
+      const memberRecord = await this.prisma.tb_project_members.findFirst({
+        where: {
+          project_id,
+          user_id: normalizedUserId,
+          status: tb_project_members_status.joined,
+        },
+      });
+      isJoinedMember = Boolean(memberRecord);
+    }
+
+    if (!isOwner && !isAdmin && !isJoinedMember) {
       throw new ForbiddenException('คุณไม่มีสิทธิ์เข้าถึงโปรเจกต์นี้');
     }
 
