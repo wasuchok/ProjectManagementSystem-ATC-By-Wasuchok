@@ -38,8 +38,8 @@ import {
     FiHash,
     FiPlay,
     FiPlus,
-    FiUserPlus,
     FiTrash2,
+    FiUserPlus,
     FiUsers,
     FiX,
 } from "react-icons/fi";
@@ -242,6 +242,42 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         project?.owner_id,
     ]);
 
+    const taskCount = taskList.length;
+    const formattedCreatedAt = useMemo(() => {
+        if (!project?.created_at) return "-";
+        const date = new Date(project.created_at);
+        return date.toLocaleString(undefined, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    }, [project?.created_at]);
+
+    const priorityMeta =
+        PRIORITY_META[project?.priority as keyof typeof PRIORITY_META] ??
+        {
+            label: "ไม่ระบุ (N/A)",
+            className: "bg-gray-100 text-gray-700 border border-gray-300",
+        };
+    const statusMeta =
+        STATUS_META[project?.status as keyof typeof STATUS_META] ??
+        {
+            label: "ไม่ระบุ (N/A)",
+            className: "bg-gray-100 text-gray-700 border border-gray-300",
+        };
+    const normalizedProjectStatus = String(project?.status ?? project?.project_status ?? "")
+        .toLowerCase()
+        .trim();
+    const isDraftStatus = normalizedProjectStatus === "draft";
+    const isCancelledStatus = normalizedProjectStatus === "cancelled";
+    const isCompletedStatus = normalizedProjectStatus === "completed";
+    const canShowStartPlanningLink = taskCount > 0 && !isDraftStatus && !isCompletedStatus;
+    const shouldShowDraftNotice = taskCount > 0 && isDraftStatus && canManageStatuses;
+    const canInviteMembers = canManageMembers && !isCancelledStatus && !isCompletedStatus;
+    const canRemoveMembers = canManageMembers && !isCancelledStatus && !isCompletedStatus;
+
     const handleDragEnd = useCallback((event: any) => {
         const { active, over } = event;
         if (!isEditMode || !canManageStatuses || !over || active.id === over.id) return;
@@ -417,7 +453,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
     }, [canManageStatuses, deletedIds, fetchTaskStatus, isSaving, originalTaskList, taskList]);
 
     const handleInviteMember = useCallback(async () => {
-        if (!canManageMembers || isInvitingMember || !project?.id) return;
+        if (!canInviteMembers || isInvitingMember || !project?.id) return;
         const trimmedUsername = newMemberUsername.trim();
         if (!trimmedUsername) return;
 
@@ -479,11 +515,11 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
         } finally {
             setIsInvitingMember(false);
         }
-    }, [canManageMembers, isInvitingMember, project?.id, newMemberUsername, members]);
+    }, [canInviteMembers, isInvitingMember, project?.id, newMemberUsername, members]);
 
     const handleRemoveMember = useCallback(
         async (memberId: string) => {
-            if (!canManageMembers || !project?.id) return;
+            if (!canRemoveMembers || !project?.id) return;
             if (!memberId || memberId === ownerUserId) return;
 
             if (!window.confirm("ยืนยันการลบสมาชิกคนนี้หรือไม่?")) {
@@ -514,49 +550,20 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                 });
             }
         },
-        [canManageMembers, project?.id, ownerUserId]
+        [canRemoveMembers, project?.id, ownerUserId]
     );
 
-    const taskCount = taskList.length;
-    const formattedCreatedAt = useMemo(() => {
-        if (!project?.created_at) return "-";
-        const date = new Date(project.created_at);
-        return date.toLocaleString(undefined, {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-        });
-    }, [project?.created_at]);
-
-    const priorityMeta =
-        PRIORITY_META[project?.priority as keyof typeof PRIORITY_META] ??
-        {
-            label: "ไม่ระบุ (N/A)",
-            className: "bg-gray-100 text-gray-700 border border-gray-300",
-        };
-    const statusMeta =
-        STATUS_META[project?.status as keyof typeof STATUS_META] ??
-        {
-            label: "ไม่ระบุ (N/A)",
-            className: "bg-gray-100 text-gray-700 border border-gray-300",
-        };
-    const normalizedProjectStatus = String(project?.status ?? project?.project_status ?? "")
-        .toLowerCase()
-        .trim();
-    const isDraftStatus = normalizedProjectStatus === "draft";
-    const isCancelledStatus = normalizedProjectStatus === "cancelled";
-    const canShowStartPlanningLink = taskCount > 0 && !isDraftStatus;
-    const shouldShowDraftNotice = taskCount > 0 && isDraftStatus && canManageStatuses;
-
     const handleUpdateProjectStatus = useCallback(
-        async (nextStatus: "started" | "cancelled") => {
+        async (nextStatus: "started" | "cancelled" | "completed") => {
             if (!project?.id) return;
 
             setIsUpdatingProjectStatus(true);
             const statusLabel =
-                nextStatus === "started" ? t("project.status_started") : t("project.status_cancelled");
+                nextStatus === "started"
+                    ? t("project.status_started")
+                    : nextStatus === "completed"
+                        ? t("project.status_completed")
+                        : t("project.status_cancelled");
 
             try {
                 await apiPrivate.patch(`/project/${project.id}`, { status: nextStatus });
@@ -792,7 +799,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                     )}
                     {canManageStatuses && (
                         <div className="flex flex-wrap gap-2">
-                            {isDraftStatus && (
+                            {isDraftStatus && !isCancelledStatus && !isCompletedStatus && (
                                 <button
                                     type="button"
                                     onClick={() => handleUpdateProjectStatus("started")}
@@ -803,7 +810,18 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                     {isUpdatingProjectStatus ? t("project.saving") : t("project.action_start_work")}
                                 </button>
                             )}
-                            {!isCancelledStatus && (
+                            {!isDraftStatus && !isCancelledStatus && !isCompletedStatus && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleUpdateProjectStatus("completed")}
+                                    disabled={isUpdatingProjectStatus}
+                                    className="inline-flex items-center gap-2 rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-green-400"
+                                >
+                                    <FiCheck size={14} />
+                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.status_completed")}
+                                </button>
+                            )}
+                            {!isCancelledStatus && !isCompletedStatus && (
                                 <button
                                     type="button"
                                     onClick={() => handleUpdateProjectStatus("cancelled")}
@@ -991,7 +1009,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                         </p>
                     </div>
 
-                    {canManageMembers && (
+                    {canInviteMembers && (
                         <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center">
                             <TextField
                                 value={newMemberUsername}
@@ -1048,7 +1066,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                     >
                                         <div className="flex items-center gap-3">
                                             <img
-                                                src={avatarUrl}
+                                                src={avatarUrl || ""}
                                                 alt={member.user_account?.full_name || "User"}
                                                 width={40}
                                                 height={40}
@@ -1081,7 +1099,7 @@ const ModalDetail = ({ open, setOpen, project }: any) => {
                                             >
                                                 {member.status === "joined" ? "Joined" : "Invited"}
                                             </span>
-                                            {canManageMembers && !isOwnerMember && (
+                                            {canRemoveMembers && !isOwnerMember && (
                                                 <button
                                                     type="button"
                                                     onClick={() => handleRemoveMember(memberUserId)}
