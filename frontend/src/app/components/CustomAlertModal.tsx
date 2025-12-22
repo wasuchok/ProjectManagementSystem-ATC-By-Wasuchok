@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import type { ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import {
     FaCheck,
@@ -8,6 +9,7 @@ import {
     FaInfo,
     FaTimes,
 } from "react-icons/fa";
+import { FiX } from "react-icons/fi";
 
 type AlertType = "info" | "success" | "error" | "confirm" | "loading";
 
@@ -16,6 +18,36 @@ interface AlertOptions {
     title: string;
     message?: string;
 }
+
+const themeMap: Record<AlertType, { accent: string; icon: ReactNode; header: string }> = {
+    info: {
+        accent: "border-blue-400 bg-blue-50 text-blue-900",
+        icon: <FaInfo className="w-6 h-6" />,
+        header: "ประกาศ",
+    },
+    success: {
+        accent: "border-emerald-400 bg-emerald-50 text-emerald-900",
+        icon: <FaCheck className="w-6 h-6" />,
+        header: "เสร็จสิ้น",
+    },
+    error: {
+        accent: "border-rose-400 bg-rose-50 text-rose-900",
+        icon: <FaTimes className="w-6 h-6" />,
+        header: "ข้อผิดพลาด",
+    },
+    confirm: {
+        accent: "border-amber-400 bg-amber-50 text-amber-900",
+        icon: <FaExclamation className="w-6 h-6" />,
+        header: "โปรดยืนยัน",
+    },
+    loading: {
+        accent: "border-slate-300 bg-white text-slate-700",
+        icon: (
+            <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+        ),
+        header: "กำลังดำเนินการ",
+    },
+};
 
 export function CustomAlert({ type = "info", title, message }: AlertOptions): Promise<boolean> {
     return new Promise((resolve) => {
@@ -30,102 +62,81 @@ export function CustomAlert({ type = "info", title, message }: AlertOptions): Pr
             resolve(result);
         };
 
-        const colors = {
-            info: "from-blue-100 to-blue-200 text-blue-600",
-            success: "from-green-100 to-green-200 text-green-600",
-            error: "from-red-100 to-red-200 text-red-600",
-            confirm: "from-yellow-100 to-yellow-200 text-yellow-600",
-            loading: "from-gray-100 to-gray-200 text-gray-500",
-        };
-
-        const icons = {
-            info: <FaInfo className="w-10 h-10" />,
-            success: <FaCheck className="w-10 h-10" />,
-            error: <FaTimes className="w-10 h-10" />,
-            confirm: <FaExclamation className="w-10 h-10" />,
-            loading: (
-                <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{
-                        repeat: Infinity,
-                        duration: 1,
-                        ease: "linear",
-                    }}
-                    className="w-10 h-10 border-4 border-gray-300 border-t-blue-500 rounded-full"
-                />
-            ),
-        };
+        const currentTheme = themeMap[type];
 
         root.render(
             <AnimatePresence>
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center backdrop-blur-sm">
+                <motion.div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/90"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                >
                     <motion.div
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.9, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: "easeOut" }}
-                        className="bg-white rounded-2xl shadow-xl w-[90%] max-w-md p-10 text-center relative"
+                        className="relative w-[min(92vw,420px)] rounded-[30px] border border-slate-200 bg-white shadow-[0_25px_40px_rgba(15,23,42,0.12)]"
+                        initial={{ opacity: 0, scale: 0.96 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.94 }}
+                        transition={{ type: "spring", stiffness: 210, damping: 20 }}
                     >
-                        <motion.div
-                            animate={
-                                type === "loading"
-                                    ? undefined
-                                    : {
-                                        scale: [1, 1.08, 1],
-                                        rotate: [0, 3, -3, 0],
-                                    }
-                            }
-                            transition={{
-                                duration: 2.2,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                            }}
-                            className={`w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-b ${colors[type]} flex items-center justify-center shadow-inner`}
+                        <button
+                            onClick={() => handleClose(type === "confirm" ? false : true)}
+                            className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+                            aria-label="Close alert"
                         >
-                            {icons[type]}
-                        </motion.div>
-
-                        <h2 className="text-2xl font-semibold text-gray-800">{title}</h2>
-                        {message && (
-                            <p className="text-gray-500 mt-3 text-base leading-relaxed">
-                                {message}
-                            </p>
-                        )}
-
+                            <FiX className="h-5 w-5" />
+                        </button>
+                        <div className={`flex items-center gap-4 border-b border-slate-200 px-6 py-5 ${currentTheme.accent}`}>
+                            <span className="rounded-full bg-white p-2 text-lg shadow-sm">
+                                {currentTheme.icon}
+                            </span>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.5em] text-slate-500">
+                                    PMS
+                                </p>
+                                <p className="text-[10px] text-slate-600 uppercase tracking-[0.4em]">
+                                    {currentTheme.header}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="px-6 py-6 text-left">
+                            <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
+                            {message && (
+                                <p className="text-slate-600 mt-3 leading-relaxed">
+                                    {message}
+                                </p>
+                            )}
+                            <div className="mt-4 h-px w-full bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+                        </div>
                         {type !== "loading" && (
-                            <div className="mt-8 flex justify-center gap-3">
+                            <div className="flex flex-col gap-3 px-6 pb-6">
                                 {type === "confirm" ? (
-                                    <>
+                                    <div className="flex flex-wrap gap-3">
                                         <button
                                             onClick={() => handleClose(false)}
-                                            className="px-6 py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium transition-all duration-200"
+                                            className="flex-1 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-none"
                                         >
-                                            ยกเลิก
+                                            ย้อนกลับ
                                         </button>
                                         <button
                                             onClick={() => handleClose(true)}
-                                            className="px-6 py-2.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-medium shadow-sm transition-all duration-200"
+                                            className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-none"
                                         >
                                             ยืนยัน
                                         </button>
-                                    </>
+                                    </div>
                                 ) : (
                                     <button
                                         onClick={() => handleClose(true)}
-                                        className={`px-8 py-2.5 rounded-lg text-white font-medium shadow-sm transition-all duration-200 ${type === "success"
-                                            ? "bg-green-500 hover:bg-green-600"
-                                            : type === "error"
-                                                ? "bg-red-500 hover:bg-red-600"
-                                                : "bg-blue-500 hover:bg-blue-600"
-                                            }`}
+                                        className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-none"
                                     >
-                                        ตกลง
+                                        ปิดข้อความ
                                     </button>
                                 )}
                             </div>
                         )}
                     </motion.div>
-                </div>
+                </motion.div>
             </AnimatePresence>
         );
     });

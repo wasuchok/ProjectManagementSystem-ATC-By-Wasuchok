@@ -9,42 +9,29 @@ import Sidebar from "./Sidebar";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activeMenu, setActiveMenu] = useState('boards');
 
     const toggleSidebar = () => {
-        setIsSidebarOpen(!isSidebarOpen);
+        setIsSidebarOpen((prev) => !prev);
     };
 
-    const handleMenuClick = (menu: any) => {
-        setActiveMenu(menu);
-    };
     return (
         <>
-
-            <div className="flex h-screen bg-white">
-                <Sidebar
-                    isOpen={isSidebarOpen}
-                    onToggle={toggleSidebar}
-                    activeMenu={activeMenu}
-                    onMenuClick={handleMenuClick}
-                />
+            <div className="flex min-h-screen bg-slate-50">
+                <Sidebar isOpen={isSidebarOpen} />
 
                 {isSidebarOpen && (
                     <div
-                        className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+                        className="fixed inset-0 z-40 bg-black/40 lg:hidden"
                         onClick={toggleSidebar}
                     />
                 )}
 
-                <div className="flex-1 flex flex-col lg:ml-64 lg:px-16 lg:pt-4">
+                <div className="flex flex-1 flex-col lg:ml-16 lg:px-10 lg:pt-5">
                     <Header onToggle={toggleSidebar} />
-                    <div className="mt-4">
+                    <main className="mt-4 flex-1">
                         {children}
-                    </div>
+                    </main>
                 </div>
-
-
-
             </div>
             <ScrollToTopButton />
         </>

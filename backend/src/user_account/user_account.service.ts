@@ -149,6 +149,7 @@ export class UserAccountService {
       id: user.user_id,
       username: user.username,
       email: user.email,
+      full_name: user.full_name ?? undefined,
     };
   }
 
@@ -332,6 +333,7 @@ export class UserAccountService {
     id: string,
     updateUserDto: UpdateUserAccountDto,
     file?: Express.Multer.File,
+    currentUserId?: string | null,
   ) {
     const user = await this.prisma.user_account.findUnique({
       where: { user_id: id },
@@ -384,6 +386,20 @@ export class UserAccountService {
       const role = updateUserDto.role.toLowerCase();
       data.v_admin = role === 'admin' ? 1 : 0;
       data.v_create = role === 'admin' || role === 'staff' ? 1 : 0;
+    }
+
+    if (typeof updateUserDto.status !== 'undefined') {
+      const normalizedStatus = Number(updateUserDto.status);
+      if (!Number.isNaN(normalizedStatus)) {
+        if (
+          normalizedStatus === 1 &&
+          currentUserId &&
+          currentUserId === id
+        ) {
+          throw new BadRequestException('ไม่สามารถระงับบัญชีตัวเองได้');
+        }
+        data.status = normalizedStatus;
+      }
     }
 
     if (file) {

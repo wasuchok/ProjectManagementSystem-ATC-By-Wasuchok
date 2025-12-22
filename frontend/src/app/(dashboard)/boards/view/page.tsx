@@ -1,6 +1,5 @@
 "use client";
 
-import ModalDetail from "@/app/components/boards/modal/ModalDetail";
 import ModalInviteJoin from "@/app/components/boards/modal/ModalInviteJoin";
 import { ScrollableTable } from "@/app/components/boards/table/ScrollableTable";
 import { CustomButton } from "@/app/components/Input/CustomButton";
@@ -23,9 +22,7 @@ const Page = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [loading, setLoading] = useState(false);
-    const [openModalDetail, setOpenModalDetail] = useState(false)
     const [openModalInviteJoin, setOpenModalInviteJoin] = useState(false)
-    const [selectedProject, setSelectedProject] = useState<any>(null);
     const [pendingCount, setPendingCount] = useState(0)
     const [projectInvite, setProjectInvite] = useState([])
 
@@ -227,9 +224,7 @@ const Page = () => {
     ];
 
     const handleEdit = (row: any) => {
-        console.log(row);
-        setSelectedProject(row);
-        setOpenModalDetail(true);
+        router.push(`/boards/detail/${row.id}`);
     };
 
     const handleDelete = (row: any) => {
@@ -263,8 +258,8 @@ const Page = () => {
 
     return (
         <>
-            <div className="space-y-6">
-                <div className="flex flex-col gap-5 rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:flex-row md:items-center md:justify-between">
+            <div className="space-y-4">
+                <div className="flex flex-col gap-4 rounded-3xl border border-slate-100 bg-white/90 p-5 shadow-sm backdrop-blur-sm md:flex-row md:items-center md:justify-between">
                     <div className="space-y-2">
                         <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                             {t("project.title")}
@@ -305,7 +300,7 @@ const Page = () => {
                     </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-100 bg-white/90 p-5 shadow-sm backdrop-blur-sm">
+                <div className="rounded-3xl border border-slate-100 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="flex w-full flex-col gap-2 md:w-auto md:flex-1 md:flex-row md:items-center">
                             <TextField
@@ -332,7 +327,7 @@ const Page = () => {
                 </div>
             </div>
 
-            <div className="mt-6 rounded-3xl border border-slate-100 bg-white/90 p-3 shadow-sm backdrop-blur-sm">
+            <div className="mt-4 rounded-3xl border border-slate-100 bg-white/90 p-3 shadow-sm backdrop-blur-sm">
                 <ScrollableTable
                     columns={columns}
                     data={data}
@@ -344,14 +339,6 @@ const Page = () => {
                     onDelete={handleDelete}
                 />
             </div>
-
-            {openModalDetail && (
-                <ModalDetail
-                    open={openModalDetail}
-                    setOpen={setOpenModalDetail}
-                    project={selectedProject}
-                />
-            )}
 
             {openModalInviteJoin && (
                 <ModalInviteJoin

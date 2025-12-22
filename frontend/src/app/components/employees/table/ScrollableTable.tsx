@@ -1,7 +1,7 @@
 import LoadingSpinner from '@/app/components/LoadingSpinner';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import Lottie from 'lottie-react';
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { FiEye, FiTrash } from 'react-icons/fi';
 import { twMerge } from 'tailwind-merge';
 import Blank from '../../../../../public/blank.json';
@@ -21,6 +21,7 @@ interface ScrollableTableProps<T> {
     itemsPerPage?: number;
     onEdit?: (row: T) => void;
     onDelete?: (row: T) => void;
+    renderActions?: (row: T) => ReactNode;
     currentPage: number;
     totalPages: number;
     onPageChange: (page: number) => void;
@@ -33,6 +34,7 @@ export function ScrollableTable<T>({
     className = '',
     onEdit,
     onDelete,
+    renderActions,
     currentPage,
     totalPages,
     onPageChange,
@@ -108,7 +110,11 @@ export function ScrollableTable<T>({
                                             </td>
                                         ))}
                                         <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2">
+                                        {renderActions ? (
+                                            renderActions(row)
+                                        ) : (
+                                            <>
                                                 {onEdit && (
                                                     <button
                                                         onClick={() => onEdit(row)}
@@ -127,7 +133,9 @@ export function ScrollableTable<T>({
                                                         <FiTrash size={16} className="font-bold" />
                                                     </button>
                                                 )}
-                                            </div>
+                                            </>
+                                        )}
+                                    </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -153,23 +161,29 @@ export function ScrollableTable<T>({
                                         ))}
                                     </div>
                                     <div className="flex flex-col gap-2">
-                                        {onEdit && (
-                                            <button
-                                                onClick={() => onEdit(row)}
-                                                className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-9 h-9 shadow-sm hover:shadow-md"
-                                                title="View"
-                                            >
-                                                <FiEye size={16} className="font-bold" />
-                                            </button>
-                                        )}
-                                        {onDelete && (
-                                            <button
-                                                onClick={() => onDelete(row)}
-                                                className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-9 h-9 shadow-sm hover:shadow-md"
-                                                title="Delete"
-                                            >
-                                                <FiTrash size={16} className="font-bold" />
-                                            </button>
+                                        {renderActions ? (
+                                            renderActions(row)
+                                        ) : (
+                                            <>
+                                                {onEdit && (
+                                                    <button
+                                                        onClick={() => onEdit(row)}
+                                                        className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-9 h-9 shadow-sm hover:shadow-md"
+                                                        title="View"
+                                                    >
+                                                        <FiEye size={16} className="font-bold" />
+                                                    </button>
+                                                )}
+                                                {onDelete && (
+                                                    <button
+                                                        onClick={() => onDelete(row)}
+                                                        className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-9 h-9 shadow-sm hover:shadow-md"
+                                                        title="Delete"
+                                                    >
+                                                        <FiTrash size={16} className="font-bold" />
+                                                    </button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>

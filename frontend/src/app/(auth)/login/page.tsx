@@ -3,6 +3,7 @@ import { CustomAlert } from "@/app/components/CustomAlertModal";
 import { CustomButton } from "@/app/components/Input/CustomButton";
 import TextField from "@/app/components/Input/TextField";
 import { useLanguage } from "@/app/contexts/LanguageContext";
+import { useUser } from "@/app/contexts/UserContext";
 import { apiPublic } from "@/app/services/apiPublic";
 import Lottie from "lottie-react";
 import { useRouter } from "next/navigation";
@@ -17,6 +18,7 @@ type FormValues = {
 
 const LoginPage = () => {
     const router = useRouter();
+    const { setUser } = useUser();
 
     const [isLoading, setIsLoading] = useState(false)
 
@@ -46,6 +48,13 @@ const LoginPage = () => {
                 })
 
                 localStorage.setItem("user", JSON.stringify(response.data))
+                setUser({
+                    id: response.data.id,
+                    username: response.data.username,
+                    full_name: response.data.full_name ?? undefined,
+                    email: response.data.email,
+                    roles: response.data.roles ?? [],
+                })
                 router.push("/home/view")
             }
         } catch (error) {

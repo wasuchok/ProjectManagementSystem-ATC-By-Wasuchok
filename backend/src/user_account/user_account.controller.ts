@@ -101,7 +101,16 @@ export class UserAccountController {
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @Body() updateUserDto: UpdateUserAccountDto,
+    @Req() req: Request,
   ) {
-    return this.userAccountService.update(id, updateUserDto, file);
+    const authUser: any = (req as any).user;
+    const currentUserId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : null;
+
+    return this.userAccountService.update(id, updateUserDto, file, currentUserId);
   }
 }

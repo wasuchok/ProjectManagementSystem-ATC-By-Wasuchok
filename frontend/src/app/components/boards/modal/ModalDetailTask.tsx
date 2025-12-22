@@ -3,7 +3,7 @@ import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { getSocket } from "@/app/utils/socket";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiMessageCircle, FiPlus, FiUser, FiRefreshCw } from "react-icons/fi";
+import { FiCalendar, FiClock, FiEdit2, FiFlag, FiHash, FiList, FiMessageCircle, FiPlus, FiRefreshCw, FiUser } from "react-icons/fi";
 import MinimalModal from "../../MinimalModal";
 
 type AssigneeOption = {
@@ -59,9 +59,7 @@ const normalizeComment = (comment: any): any => ({
     message: comment.message ?? "",
     createdAt: comment.created_at ?? comment.createdAt ?? undefined,
     updatedAt: comment.updated_at ?? comment.updatedAt ?? undefined,
-    authorName:
-        comment.authorName,
-    undefined,
+    authorName: comment.authorName,
     authorRole: comment.authorDepartment ?? undefined,
     data: comment
 });
@@ -736,9 +734,7 @@ const ModalDetailTask = ({
         const payload: Record<string, any> = {
             progress_percent: Math.min(100, Math.max(0, progressNumber)),
         };
-        if (editStatusId != null && editStatusId !== "") {
-            payload.status_id = Number(editStatusId);
-        }
+
 
         setIsUpdatingSubtask(true);
         setUpdateError(null);
@@ -1198,27 +1194,7 @@ const ModalDetailTask = ({
                                                                         {editProgressPercent}%
                                                                     </p>
                                                                 </div>
-                                                                {statusOptions.length > 0 && (
-                                                                    <div className="space-y-1">
-                                                                        <label className="font-semibold uppercase tracking-wide text-slate-500">
-                                                                            {t('project.table_status')}
-                                                                        </label>
-                                                                        <select
-                                                                            value={editStatusId ?? ""}
-                                                                            onChange={(event) => {
-                                                                                const value = event.target.value;
-                                                                                setEditStatusId(value ? value : null);
-                                                                            }}
-                                                                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 transition focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
-                                                                        >
-                                                                            {statusOptions.map((option) => (
-                                                                                <option key={option.id} value={option.id}>
-                                                                                    {option.title}
-                                                                                </option>
-                                                                            ))}
-                                                                        </select>
-                                                                    </div>
-                                                                )}
+
                                                             </div>
                                                             {updateError && (
                                                                 <p className="font-semibold text-rose-500">{updateError}</p>
@@ -1296,7 +1272,7 @@ const ModalDetailTask = ({
                                 comments.map((comment) => {
 
                                     const author = comment.authorName ?? comment.userId;
-                                    console.log("test tesat", comment)
+
                                     const displayTime = comment.createdAt ? formatDateTime(comment.createdAt) : undefined;
                                     return (
                                         <div

@@ -8,18 +8,17 @@ import { apiPrivate } from "@/app/services/apiPrivate";
 import { decodeSingleHashid } from "@/app/utils/hashids";
 import { getSocket } from "@/app/utils/socket";
 import {
-    DragDropContext,
-    Draggable,
-    Droppable,
-    DropResult,
+    DropResult
 } from "@hello-pangea/dnd";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-    FaPlus
-} from "react-icons/fa";
-import { FiChevronRight, FiClock, FiRefreshCw, FiPlay, FiX, FiCheck } from "react-icons/fi";
+import { FiCheck, FiPlay, FiX } from "react-icons/fi";
 import type { Socket } from "socket.io-client";
+import BoardView from "./components/BoardView";
+import GanttView from "./components/GanttView";
+import LogsView from "./components/LogsView";
+import TimelineView from "./components/TimelineView";
+import WorkloadView from "./components/WorkloadView";
 
 type SubtaskAssignee = {
     id: string;
@@ -180,9 +179,9 @@ export default function KanbanBoard() {
     );
     const ganttScaleOptions = useMemo(
         () => [
-            { key: "day" as const, label: t('project.gantt_scale_day') },
-            { key: "week" as const, label: t('project.gantt_scale_week') },
-            { key: "month" as const, label: t('project.gantt_scale_month') },
+            { value: "day", label: t('project.gantt_scale_day') },
+            { value: "week", label: t('project.gantt_scale_week') },
+            { value: "month", label: t('project.gantt_scale_month') },
         ],
         [t]
     );
@@ -539,7 +538,7 @@ export default function KanbanBoard() {
 
     const buildGanttColumns = useCallback(
         (rangeStart: Date, rangeEnd: Date, scale: "day" | "week" | "month") => {
-            const columns: Array<{ key: string; start: Date; end: Date; label: string }> = [];
+            const columns: Array<{ key: string; date: Date; label: string }> = [];
             let cursor = new Date(rangeStart);
             let index = 0;
             while (cursor < rangeEnd) {
@@ -559,8 +558,7 @@ export default function KanbanBoard() {
                 }
                 columns.push({
                     key: `${scale}-${index}`,
-                    start: columnStart,
-                    end: columnEnd,
+                    date: columnStart,
                     label,
                 });
                 cursor = columnEnd;
@@ -571,7 +569,7 @@ export default function KanbanBoard() {
         [addScaleStep, dateFormatter]
     );
 
-    // moved below timelineBySubtask to avoid TDZ errors
+
 
     const updateBoardsWithTask = useCallback((normalizedTask: Task, previousStatusId?: string | null) => {
         const destinationBoardId = normalizedTask.statusId ? String(normalizedTask.statusId) : null;
@@ -963,7 +961,10 @@ export default function KanbanBoard() {
     }, [projectId]);
 
     const describeTimelineEvent = useCallback(
-        (log: TaskLogEntry) => {
+        (entry: any) => {
+            const log = entry.meta as TaskLogEntry;
+            if (!log) return "";
+
             const parts: string[] = [];
             const statusUnknown = t('project.task_logs_status_unknown');
             const oldStatusLabel = log.oldStatus?.name ?? statusUnknown;
@@ -1019,15 +1020,19 @@ export default function KanbanBoard() {
         return taskLogs
             .filter((log) => Boolean(log.createdAt))
             .map((log) => ({
-                ...log,
-                timestamp: log.createdAt ? new Date(log.createdAt) : null,
+                id: log.id,
+                date: log.createdAt ? new Date(log.createdAt) : new Date(),
+                type: "updated" as const, // Default to updated, logic can be improved
+                title: log.taskTitle || log.subtaskTitle || t('project.task_logs_untitled_task'),
+                user: log.changedByName || t('project.gantt_owner_unassigned'),
+                meta: log,
             }))
             .sort((a, b) => {
-                const aTime = a.timestamp?.getTime() ?? 0;
-                const bTime = b.timestamp?.getTime() ?? 0;
+                const aTime = a.date.getTime();
+                const bTime = b.date.getTime();
                 return bTime - aTime;
             });
-    }, [taskLogs]);
+    }, [taskLogs, t]);
 
     const timelineGroups = useMemo(() => {
         if (timelineEntries.length === 0) return [];
@@ -1040,12 +1045,8 @@ export default function KanbanBoard() {
         >();
 
         timelineEntries.forEach((entry) => {
-            const dateKey = entry.timestamp
-                ? entry.timestamp.toISOString().split("T")[0]
-                : "unknown";
-            const displayLabel = entry.timestamp
-                ? dateFormatter.format(entry.timestamp)
-                : t('project.timeline_unknown_date');
+            const dateKey = entry.date.toISOString().split("T")[0];
+            const displayLabel = dateFormatter.format(entry.date);
             if (!groups.has(dateKey)) {
                 groups.set(dateKey, {
                     label: displayLabel,
@@ -1071,17 +1072,18 @@ export default function KanbanBoard() {
             }>
         >();
         timelineEntries.forEach((entry) => {
-            if (!entry.subtaskId || !entry.timestamp) return;
-            const id = String(entry.subtaskId);
+            const log = entry.meta as TaskLogEntry;
+            if (!log || !log.subtaskId) return;
+            const id = String(log.subtaskId);
             const progress =
-                entry.newProgress != null
-                    ? Number(entry.newProgress)
-                    : entry.oldProgress != null
-                        ? Number(entry.oldProgress)
+                log.newProgress != null
+                    ? Number(log.newProgress)
+                    : log.oldProgress != null
+                        ? Number(log.oldProgress)
                         : null;
             const arr = map.get(id) ?? [];
             arr.push({
-                timestamp: entry.timestamp,
+                timestamp: entry.date,
                 progress: progress,
             });
             map.set(id, arr);
@@ -1138,8 +1140,23 @@ export default function KanbanBoard() {
                     const dueDate = parseDateValue(subtask.dueDate);
                     const completedDate = parseDateValue(subtask.completedDate);
                     const hasDue = isTruthy(subtask.hasDueDate) || (dueDate != null);
-                    const plannedEnd = hasDue && dueDate ? dueDate : start;
-                    const actualEnd = completedDate ?? plannedEnd;
+                    // If no due date, or due date <= start date (same day), default to 1 day duration for visualization
+                    let plannedEnd = hasDue && dueDate ? dueDate : new Date(start.getTime() + MS_PER_DAY);
+                    if (plannedEnd.getTime() <= start.getTime()) {
+                        plannedEnd = new Date(start.getTime() + MS_PER_DAY);
+                    }
+
+                    // Calculate actual end based on progress percentage
+                    const duration = plannedEnd.getTime() - start.getTime();
+                    const progressVal = Number(subtask.progressPercent || 0);
+                    const progressFraction = Math.min(100, Math.max(0, progressVal)) / 100;
+
+                    // If completed, ensure bar fills at least the planned duration (user request)
+                    // If late, it extends beyond. If early, it fills the plan.
+                    const actualEnd = completedDate
+                        ? (completedDate.getTime() > plannedEnd.getTime() ? completedDate : plannedEnd)
+                        : new Date(start.getTime() + (duration * progressFraction));
+
                     const displayEnd = actualEnd > plannedEnd ? actualEnd : plannedEnd;
 
                     const statusMeta = subtask.statusId ? statusLookup.get(String(subtask.statusId)) : undefined;
@@ -1160,22 +1177,27 @@ export default function KanbanBoard() {
                     const now = new Date();
                     const compareEndForLate = completedDate ?? (progress >= 100 ? now : null);
                     // compare against end-of-day of due date to avoid same-day false late
-                    const dueStartOfDay = dueDate ? new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), 0, 0, 0, 0) : null;
-                    const dueEndOfDay = dueDate ? new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), 23, 59, 59, 999) : null;
+                    const dueDayStart = dueDate ? new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()) : null;
+                    const completionSource =
+                        completedDate ??
+                        (progress >= 100 ? now : null);
+                    const completionDayStart = completionSource
+                        ? new Date(completionSource.getFullYear(), completionSource.getMonth(), completionSource.getDate())
+                        : null;
                     const isLate =
                         progress >= 100 &&
-                        hasDue &&
-                        dueEndOfDay != null &&
-                        compareEndForLate != null &&
-                        compareEndForLate.getTime() > dueEndOfDay.getTime();
+                        Boolean(hasDue) &&
+                        dueDayStart != null &&
+                        completionDayStart != null &&
+                        completionDayStart.getTime() > dueDayStart.getTime();
 
-                    const compareEndForEarly = completedDate ?? (progress >= 100 ? now : null);
+                    const compareEndForEarly = completionSource;
                     const isEarly =
                         progress >= 100 &&
                         hasDue &&
-                        dueStartOfDay != null &&
+                        dueDayStart != null &&
                         compareEndForEarly != null &&
-                        compareEndForEarly.getTime() < dueStartOfDay.getTime();
+                        compareEndForEarly.getTime() < dueDayStart.getTime();
 
                     items.push({
                         id: `${task.id}-${subtask.id}`,
@@ -1523,791 +1545,92 @@ export default function KanbanBoard() {
                             )}
                         </div>
                     )}
-                    {activeTab !== "board" && (
-                        <button
-                            type="button"
-                            onClick={() => fetchTaskLogs()}
-                            className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600 focus:outline-none focus:ring-1 focus:ring-primary-200 disabled:cursor-not-allowed disabled:opacity-70"
-                            disabled={isLoadingTaskLogs}
-                        >
-                            <FiRefreshCw className={isLoadingTaskLogs ? "animate-spin" : ""} size={14} />
-                            {t('project.task_logs_refresh')}
-                        </button>
-                    )}
+
                 </div>
                 {activeTab === "board" && (
-                    <DragDropContext onDragEnd={handleDragEnd}>
-                        <div className="flex gap-6 overflow-x-auto pb-4">
-                            {boards.map((board) => {
-                                const tasks = board.tasks ?? [];
-
-                                return (
-                                    <Droppable droppableId={board.id} key={board.id} isDropDisabled={!canManageTasks}>
-                                        {(provided, snapshot) => (
-                                            <div
-                                                ref={provided.innerRef}
-                                                {...provided.droppableProps}
-                                                className={`group flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_-22px_rgba(15,23,42,0.5)] transition-all duration-200 hover:border-primary-200/60 hover:shadow-[0_18px_38px_-24px_rgba(15,23,42,0.45)] ${snapshot.isDraggingOver ? "ring-2 ring-primary-200/60" : ""}`}
-                                                style={{
-                                                    width: "20rem",
-                                                    maxHeight: "82vh",
-                                                    flexShrink: 0,
-                                                    borderTop: `6px solid ${board.color ?? "#e2e8f0"}`,
-                                                }}
-                                            >
-                                                <div
-                                                    className="flex items-center justify-between rounded-t-xl px-5 py-4 text-sm text-slate-700"
-                                                    style={{
-                                                        background: "#ffffff",
-                                                    }}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-600"
-                                                            style={{
-                                                                color: board.color ?? "#1f2937",
-                                                            }}
-                                                        >
-                                                            {(board.title ?? "?").slice(0, 2)}
-                                                        </div>
-                                                        <div>
-                                                            <h2 className="font-semibold text-base leading-tight">
-                                                                {board.title}
-                                                            </h2>
-                                                            <span className="text-xs text-slate-400">
-                                                                {tasks.length} {t('project.tasks')}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    {board.isDefault && canManageTasks && (
-                                                        <button
-                                                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-500"
-                                                            type="button"
-                                                            aria-label="Add task"
-                                                            onClick={() => {
-                                                                setOpenModalIsDefault(true)
-                                                            }}
-                                                        >
-                                                            <FaPlus size={14} />
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                                <div
-                                                    className="flex-1 overflow-y-auto p-4"
-                                                    style={{
-                                                        height: "calc(82vh - 110px)",
-                                                    }}
-                                                >
-                                                    {tasks.length === 0 && (
-                                                        <div className="flex h-[130px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
-                                                            {t('project.drop_card_here')}
-                                                        </div>
-                                                    )}
-
-                                                    {tasks.map((task, index) => {
-                                                        const priorityMeta = task.priority ? priorityConfig[task.priority] : undefined;
-                                                        const badgeClass = priorityMeta?.badgeClass ?? "border-slate-200 bg-slate-100 text-slate-500";
-                                                        const dotClass = priorityMeta?.dotClass ?? "bg-slate-400";
-                                                        const priorityLabel = priorityMeta?.label ?? (task.priority ? `${task.priority.charAt(0).toUpperCase()}${task.priority.slice(1)}` : "No Priority");
-                                                        const progressValue = getProgressValue(task.progressPercent);
-                                                        const hasProgress = task.progressPercent != null && task.progressPercent !== "";
-                                                        const progressAppearance = getProgressAppearance(progressValue);
-
-                                                        return (
-                                                            <Draggable
-                                                                key={task.id}
-                                                                draggableId={task.id}
-                                                                index={index}
-                                                                isDragDisabled={!canManageTasks}
-                                                            >
-                                                                {(provided, snapshot) => (
-                                                                    <div
-                                                                        ref={provided.innerRef}
-                                                                        {...provided.draggableProps}
-                                                                        {...provided.dragHandleProps}
-                                                                        className={`relative flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.45)] transition-all duration-200 ${snapshot.isDragging
-                                                                            ? "scale-[1.01] border-primary-200 shadow-[0_18px_38px_-24px_rgba(59,130,246,0.35)]"
-                                                                            : "hover:border-primary-200 hover:shadow-[0_16px_30px_-24px_rgba(59,130,246,0.22)]"
-                                                                            }`}
-                                                                    >
-                                                                        <div className="flex items-start justify-between gap-3">
-                                                                            <h3 className="text-sm font-semibold leading-snug text-slate-800">
-                                                                                {task.title}
-                                                                            </h3>
-                                                                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold tracking-wide text-slate-500">
-                                                                                #{task.id}
-                                                                            </span>
-                                                                        </div>
-
-                                                                        {hasProgress && (
-                                                                            <div className="space-y-1.5">
-                                                                                <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                                                                                    <span>{t('project.progress')}</span>
-                                                                                    <span className="text-slate-500">{progressValue}%</span>
-                                                                                </div>
-                                                                                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                                                                                    <div
-                                                                                        className="progress-bar-fill absolute inset-y-0 left-0 rounded-full"
-                                                                                        style={{
-                                                                                            width: `${progressValue}%`,
-                                                                                            background: progressAppearance.gradient,
-                                                                                            backgroundSize: "200% 100%",
-                                                                                            ["--glow-color" as any]: progressAppearance.glowColor,
-                                                                                        }}
-                                                                                    />
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-
-                                                                        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                                                                            <div
-                                                                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold uppercase tracking-wide ${badgeClass}`}
-                                                                            >
-                                                                                <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-                                                                                {priorityLabel}
-                                                                            </div>
-                                                                            <button
-                                                                                type="button"
-                                                                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-200"
-                                                                                onClick={() => handleOpenTaskModal(task)}
-                                                                            >
-                                                                                <span className="h-1 w-1 rounded-full bg-slate-300" />
-                                                                                {t('project.view_details')}
-                                                                                <FiChevronRight size={12} />
-                                                                            </button>
-                                                                        </div>
-                                                                        <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
-                                                                            <span className="inline-flex items-center gap-2">
-                                                                                <span className="h-1 w-1 rounded-full bg-primary-200" />
-                                                                                {t('project.drag_to_change_status')}
-                                                                            </span>
-                                                                            <FiChevronRight className="text-slate-300" size={13} />
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </Draggable>
-                                                        );
-                                                    })}
-
-                                                    {provided.placeholder}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </Droppable>
-                                );
-                            })}
-                        </div>
-                    </DragDropContext>
+                    <BoardView
+                        boards={boards}
+                        canManageTasks={canManageTasks}
+                        handleDragEnd={handleDragEnd}
+                        handleOpenTaskModal={handleOpenTaskModal}
+                        setOpenModalIsDefault={setOpenModalIsDefault}
+                        t={t}
+                        priorityConfig={priorityConfig}
+                        getProgressValue={getProgressValue}
+                        getProgressAppearance={getProgressAppearance}
+                    />
                 )}
+
                 {activeTab === "logs" && (
-                    <div className="flex flex-col gap-4">
-                        <h2 className="text-base font-semibold text-slate-700">{t('project.task_logs_heading')}</h2>
-                        <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.4)]">
-                            {isLoadingTaskLogs ? (
-                                <p className="text-sm text-slate-500">{t('project.task_logs_loading')}</p>
-                            ) : taskLogsError ? (
-                                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-600">
-                                    {taskLogsError}
-                                </div>
-                            ) : taskLogs.length === 0 ? (
-                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                                    {t('project.task_logs_empty')}
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {taskLogs.map((log) => {
-                                        const actorName = log.changedByName ?? log.changedBy ?? t('project.task_logs_unknown_user');
-                                        const timestamp = log.createdAt ? formatDateTime(log.createdAt) : null;
-                                        const statusInfo = (status: TaskLogStatus | null | undefined) => ({
-                                            label: status?.name ?? t('project.task_logs_status_unknown'),
-                                            color: status?.color ?? "#94a3b8",
-                                        });
-                                        const oldStatusInfo = statusInfo(log.oldStatus);
-                                        const newStatusInfo = statusInfo(log.newStatus);
-                                        const showStatus = Boolean(log.oldStatus || log.newStatus);
-                                        const showProgress =
-                                            log.oldProgress != null &&
-                                            log.newProgress != null &&
-                                            Number(log.oldProgress) !== Number(log.newProgress);
-
-                                        return (
-                                            <div
-                                                key={log.id}
-                                                className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.35)]"
-                                            >
-                                                <div className="flex flex-wrap items-center gap-3">
-                                                    <div>
-                                                        <p className="text-sm font-semibold text-slate-800">
-                                                            {log.taskTitle ?? t('project.task_logs_untitled_task')}
-                                                        </p>
-                                                        <p className="text-xs text-slate-400">#{log.taskId}</p>
-                                                    </div>
-                                                    {log.subtaskTitle && (
-                                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                                                            {t('project.task_logs_subtask')}
-                                                            <span className="font-semibold text-slate-600">{log.subtaskTitle}</span>
-                                                        </span>
-                                                    )}
-                                                    {timestamp && (
-                                                        <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-slate-400">
-                                                            <FiClock size={12} />
-                                                            {timestamp}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="space-y-2 text-xs">
-                                                    <div className="flex flex-wrap items-center gap-2 text-slate-500">
-                                                        <span className="font-semibold text-slate-600">
-                                                            {t('project.task_logs_changed_by_label')}
-                                                        </span>
-                                                        <span className="text-slate-700">
-                                                            {actorName}
-                                                            {log.changedByDepartment ? ` • ${log.changedByDepartment}` : ""}
-                                                        </span>
-                                                    </div>
-                                                    {showStatus && (
-                                                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                {t('project.task_logs_status')}
-                                                            </span>
-                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
-                                                                <span
-                                                                    className="h-2 w-2 rounded-full"
-                                                                    style={{ backgroundColor: oldStatusInfo.color ?? "#94a3b8" }}
-                                                                />
-                                                                {oldStatusInfo.label}
-                                                            </span>
-                                                            <FiChevronRight className="text-slate-300" size={12} />
-                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
-                                                                <span
-                                                                    className="h-2 w-2 rounded-full"
-                                                                    style={{ backgroundColor: newStatusInfo.color ?? "#94a3b8" }}
-                                                                />
-                                                                {newStatusInfo.label}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    {showProgress && (
-                                                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                {t('project.task_logs_progress')}
-                                                            </span>
-                                                            <span className="font-semibold text-slate-600">
-                                                                {Math.round(Number(log.oldProgress ?? 0))}%
-                                                            </span>
-                                                            <FiChevronRight className="text-slate-300" size={12} />
-                                                            <span className="font-semibold text-slate-600">
-                                                                {Math.round(Number(log.newProgress ?? 0))}%
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <LogsView
+                        taskLogs={taskLogs}
+                        isLoadingTaskLogs={isLoadingTaskLogs}
+                        taskLogsError={taskLogsError}
+                        t={t}
+                        formatDateTime={formatDateTime}
+                    />
                 )}
+
                 {activeTab === "timeline" && (
-                    <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-base font-semibold text-slate-700">{t('project.timeline_heading')}</h2>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.4)]">
-                            {isLoadingTaskLogs ? (
-                                <p className="text-sm text-slate-500">{t('project.timeline_loading')}</p>
-                            ) : taskLogsError ? (
-                                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-600">
-                                    {taskLogsError}
-                                </div>
-                            ) : timelineEntries.length === 0 ? (
-                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                                    {t('project.timeline_empty')}
-                                </div>
-                            ) : (
-                                <div className="space-y-8">
-                                    {timelineGroups.map((group) => (
-                                        <div key={group.key}>
-                                            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                                                {group.label}
-                                            </h3>
-                                            <div className="space-y-4 border-l border-slate-200 pl-6">
-                                                {group.items.map((log) => {
-                                                    const actorName = log.changedByName ?? log.changedBy ?? t('project.task_logs_unknown_user');
-                                                    const timestamp = log.timestamp ? formatDateTime(log.timestamp.toISOString()) : null;
-                                                    const statusInfo = (status: TaskLogStatus | null | undefined) => ({
-                                                        label: status?.name ?? t('project.task_logs_status_unknown'),
-                                                        color: status?.color ?? "#94a3b8",
-                                                    });
-                                                    const oldStatusInfo = statusInfo(log.oldStatus);
-                                                    const newStatusInfo = statusInfo(log.newStatus);
-                                                    const showStatus =
-                                                        Boolean(log.oldStatus || log.newStatus) &&
-                                                        (log.oldStatus?.id !== log.newStatus?.id);
-                                                    const showProgress =
-                                                        log.oldProgress != null &&
-                                                        log.newProgress != null &&
-                                                        Number(log.oldProgress) !== Number(log.newProgress);
-                                                    const eventDescription = describeTimelineEvent(log);
-
-                                                    return (
-                                                        <div key={`${log.id}-${log.taskId}`} className="relative">
-                                                            <span className="absolute -left-[13px] top-6 h-3 w-3 rounded-full border-2 border-white bg-primary-500 shadow-[0_0_0_4px_rgba(59,130,246,0.15)]" />
-                                                            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.35)]">
-                                                                <div className="flex flex-wrap items-start gap-3">
-                                                                    <div>
-                                                                        <p className="text-sm font-semibold text-slate-800">
-                                                                            {log.taskTitle ?? t('project.task_logs_untitled_task')}
-                                                                        </p>
-                                                                        <p className="text-xs text-slate-400">#{log.taskId}</p>
-                                                                        {log.subtaskTitle && (
-                                                                            <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                                                                                {t('project.timeline_subtask_label')}
-                                                                                <span className="font-semibold text-slate-600">{log.subtaskTitle}</span>
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                    {timestamp && (
-                                                                        <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-slate-400">
-                                                                            <FiClock size={12} />
-                                                                            {timestamp}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                {eventDescription && (
-                                                                    <p className="mt-3 text-sm font-medium text-slate-700">
-                                                                        {eventDescription}
-                                                                    </p>
-                                                                )}
-                                                                <div className="mt-3 space-y-2 text-xs text-slate-500">
-                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                        <span className="font-semibold text-slate-600">
-                                                                            {t('project.timeline_assignee')}
-                                                                        </span>
-                                                                        <span className="text-slate-700">
-                                                                            {actorName}
-                                                                            {log.changedByDepartment ? ` • ${log.changedByDepartment}` : ""}
-                                                                        </span>
-                                                                    </div>
-                                                                    {showStatus && (
-                                                                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
-                                                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                                {t('project.task_logs_status')}
-                                                                            </span>
-                                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
-                                                                                <span
-                                                                                    className="h-2 w-2 rounded-full"
-                                                                                    style={{ backgroundColor: oldStatusInfo.color ?? "#94a3b8" }}
-                                                                                />
-                                                                                {oldStatusInfo.label}
-                                                                            </span>
-                                                                            <FiChevronRight className="text-slate-300" size={12} />
-                                                                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-600">
-                                                                                <span
-                                                                                    className="h-2 w-2 rounded-full"
-                                                                                    style={{ backgroundColor: newStatusInfo.color ?? "#94a3b8" }}
-                                                                                />
-                                                                                {newStatusInfo.label}
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-                                                                    {showProgress && (
-                                                                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
-                                                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                                {t('project.task_logs_progress')}
-                                                                            </span>
-                                                                            <span className="font-semibold text-slate-600">
-                                                                                {Math.round(Number(log.oldProgress ?? 0))}%
-                                                                            </span>
-                                                                            <FiChevronRight className="text-slate-300" size={12} />
-                                                                            <span className="font-semibold text-slate-600">
-                                                                                {Math.round(Number(log.newProgress ?? 0))}%
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <TimelineView
+                        timelineGroups={timelineGroups}
+                        isLoadingTaskLogs={isLoadingTaskLogs}
+                        taskLogsError={taskLogsError}
+                        t={t}
+                        formatDateTime={formatDateTime}
+                        describeTimelineEvent={describeTimelineEvent}
+                    />
                 )}
+
                 {activeTab === "gantt" && (
-                    <div className="flex flex-col gap-4">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="flex flex-wrap items-center gap-4">
-                                <h2 className="text-base font-semibold text-slate-700">{t('project.gantt_heading')}</h2>
-                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    <span>{t('project.gantt_scale_label')}</span>
-                                    <div className="inline-flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-                                        {ganttScaleOptions.map((option) => (
-                                            <button
-                                                key={option.key}
-                                                type="button"
-                                                onClick={() => setGanttScale(option.key)}
-                                                className={`rounded-full px-3 py-1 font-semibold transition ${ganttScale === option.key ? "bg-primary-600 text-white shadow" : "text-slate-500 hover:text-primary-500"
-                                                    }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                    </div>
+                    <>
+                        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+                                {t("project.gantt_help_title")}
+                            </p>
+                            <p className="mt-1">{t("project.gantt_help_content")}</p>
+                            <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium uppercase tracking-[0.2em]">
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                                    {t("project.gantt_legend_early")}
+                                </div>
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
+                                    {t("project.gantt_legend_late")}
+                                </div>
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                                    {t("project.gantt_legend_overdue")}
                                 </div>
                             </div>
-                            {ganttScaleLabels && (
-                                <div className="flex flex-wrap gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                                    <span>{ganttScaleLabels.startLabel}</span>
-                                    <span>{ganttScaleLabels.midLabel}</span>
-                                    <span>{ganttScaleLabels.endLabel}</span>
-                                </div>
-                            )}
                         </div>
-                        <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.4)]">
-                            {ganttItems.length === 0 || !ganttRange ? (
-                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                                    {t('project.gantt_empty')}
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <div className="min-w-[960px] rounded-xl border border-slate-200">
-                                        <div className="grid grid-cols-[minmax(320px,360px)_1fr] border-b border-slate-200 bg-slate-50">
-                                            <div className="grid grid-cols-[2fr,0.9fr,1.1fr,1fr,1fr,1fr] items-center gap-3 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                                                <span>{t('project.task_logs_subtask')}</span>
-                                                <span>%</span>
-                                                <span>{t('project.timeline_assignee')}</span>
-                                                <span>{t('project.gantt_duration_label')}</span>
-                                                <span>{t('project.gantt_start_column')}</span>
-                                                <span>{t('project.gantt_end_column')}</span>
-                                            </div>
-                                            <div
-                                                className="grid items-center border-l border-slate-200 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-600"
-                                                style={{ gridTemplateColumns: `repeat(${ganttColumns.length}, minmax(96px, 1fr))` }}
-                                            >
-                                                {ganttColumns.map((column) => (
-                                                    <div key={column.key} className="px-3 py-3">
-                                                        <span className="block truncate">{column.label}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        {ganttGroups.map((group, groupIndex) => (
-                                            <div key={`group-${group.taskId}`}>
-                                                <div className="grid grid-cols-[minmax(320px,360px)_1fr] border-t border-slate-200 bg-slate-50/80">
-                                                    <div className="px-4 py-2.5 text-[13px] font-semibold text-slate-700">
-                                                        <span className="mr-2 text-slate-400">Task</span>
-                                                        <span className="text-slate-800">{group.taskTitle}</span>
-                                                        <span className="ml-2 text-xs font-semibold text-slate-400">#{group.taskId}</span>
-                                                    </div>
-                                                    <div className="border-l border-slate-200" />
-                                                </div>
-                                                {group.items.map((item, index) => {
-                                                    const isStriped = index % 2 === 1;
-                                                    const rowBackground = isStriped ? "bg-slate-50" : "bg-white";
-                                                    const totalMs = Math.max(1, ganttRange.end.getTime() - ganttRange.start.getTime());
-                                                    const plannedDurationMs = Math.max(item.plannedEnd.getTime() - item.start.getTime(), MS_PER_DAY * 0.45);
-                                                    const progressRatio = Math.min(1, Math.max(0, item.progress / 100));
-                                                    const actualEndMs =
-                                                        item.progress >= 100
-                                                            ? (item.isEarly ? item.actualEnd.getTime() : item.plannedEnd.getTime())
-                                                            : item.start.getTime() + plannedDurationMs * progressRatio;
-                                                    const actualDurationMs = Math.max(actualEndMs - item.start.getTime(), MS_PER_DAY * 0.35);
-                                                    const planLeft = Math.min(Math.max(0, (item.start.getTime() - ganttRange.start.getTime()) / totalMs * 100), 100);
-                                                    const planWidth = Math.min(100 - planLeft, Math.max((plannedDurationMs / totalMs) * 100, 2.75));
-                                                    let actualLeft = Math.min(Math.max(0, (item.start.getTime() - ganttRange.start.getTime()) / totalMs * 100), 100);
-                                                    let actualWidth = Math.min(100 - actualLeft, Math.max((actualDurationMs / totalMs) * 100, 2.75));
-                                                    if (item.progress >= 100 && !item.isEarly) {
-                                                        // Force the actual bar to match plan when finished on/after due (not early)
-                                                        actualLeft = planLeft;
-                                                        actualWidth = planWidth;
-                                                    }
-                                                    const barColor = item.statusColor ?? "rgba(59,130,246,0.85)";
-                                                    const actualColor = item.isLate ? "#ef4444" : (item.isEarly ? "#10b981" : barColor);
-                                                    const progressText = `${Math.round(item.progress)}%`;
-                                                    const updateMarkers = item.updates
-                                                        .map((update) => {
-                                                            const ts = update.timestamp.getTime();
-                                                            if (ts < ganttRange.start.getTime() || ts > ganttRange.end.getTime()) return null;
-                                                            const left = ((ts - ganttRange.start.getTime()) / totalMs) * 100;
-                                                            return {
-                                                                left,
-                                                                progress: update.progress != null ? Math.round(update.progress) : null,
-                                                                timestamp: update.timestamp,
-                                                            };
-                                                        })
-                                                        .filter(Boolean) as Array<{ left: number; progress: number | null; timestamp: Date }>;
-
-                                                    // In-bar markers (positioned relative to actual bar)
-                                                    const barSpanStart = item.start.getTime();
-                                                    const barSpanEnd = item.displayEnd.getTime();
-                                                    const barSpanMs = Math.max(1, barSpanEnd - barSpanStart);
-                                                    const inBarMarkers = item.updates
-                                                        .map((update) => {
-                                                            const ts = update.timestamp.getTime();
-                                                            if (ts < barSpanStart || ts > barSpanEnd) return null;
-                                                            const left = ((ts - barSpanStart) / barSpanMs) * 100;
-                                                            return {
-                                                                left,
-                                                                progress: update.progress != null ? Math.round(update.progress) : null,
-                                                                timestamp: update.timestamp,
-                                                            };
-                                                        })
-                                                        .filter(Boolean) as Array<{ left: number; progress: number | null; timestamp: Date }>;
-
-                                                    return (
-                                                        <div
-                                                            key={item.id}
-                                                            className={`grid grid-cols-[minmax(320px,360px)_1fr] border-t border-slate-200 ${rowBackground}`}
-                                                        >
-                                                            <div className="grid grid-cols-[2fr,0.9fr,1.1fr,1fr,1fr,1fr] items-center gap-3 px-4 py-3 text-sm text-slate-600">
-                                                                <div className="flex flex-col gap-1 pr-3">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="max-w-[210px] truncate font-semibold text-slate-800">{item.taskTitle}</span>
-                                                                        <span className="text-xs font-semibold text-slate-400">#{item.subtaskId}</span>
-                                                                    </div>
-                                                                    {item.subtaskTitle && (
-                                                                        <p className="text-xs text-slate-500">{item.subtaskTitle}</p>
-                                                                    )}
-                                                                </div>
-                                                                <div>
-                                                                    <div className="relative h-5 w-20 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-                                                                        <div
-                                                                            className="absolute inset-y-0 left-0 bg-primary-500/80"
-                                                                            style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }}
-                                                                        />
-                                                                        <span className="relative z-10 flex h-full items-center justify-center text-[10px] font-semibold text-primary-900">
-                                                                            {progressText}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                <span className="truncate text-xs text-slate-600">{item.owner}</span>
-                                                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
-                                                                    <span>{item.durationLabel}</span>
-                                                                    {item.isLate && (
-                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-[2px] text-[10px] font-semibold text-rose-600">
-                                                                            {t('project.gantt_late_badge')}
-                                                                        </span>
-                                                                    )}
-                                                                    {!item.isLate && item.isEarly && (
-                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-[2px] text-[10px] font-semibold text-emerald-700">
-                                                                            เสร็จก่อนกำหนด
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <span className="text-xs text-slate-600">{dateFormatter.format(item.start)}</span>
-                                                                <div className="text-xs text-slate-600">
-                                                                    {item.dueDate ? dateFormatter.format(item.plannedEnd) : '-'}
-                                                                    {item.dueDate && item.completedDate && (
-                                                                        <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-slate-500">
-                                                                            • {t('project.gantt_actual_label')} {dateFormatter.format(item.actualEnd)}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            <div className="relative h-16 border-l border-slate-200">
-                                                                <div
-                                                                    className="absolute inset-0 grid"
-                                                                    style={{ gridTemplateColumns: `repeat(${ganttColumns.length}, minmax(96px, 1fr))` }}
-                                                                >
-                                                                    {ganttColumns.map((column, columnIndex) => {
-                                                                        const shade = columnIndex % 2 === 0 ? "rgba(148,163,184,0.08)" : "transparent";
-                                                                        return (
-                                                                            <div
-                                                                                key={`${item.id}-col-${column.key}`}
-                                                                                className={`border-l border-slate-100 ${columnIndex === ganttColumns.length - 1 ? "border-r" : ""}`}
-                                                                                style={{ backgroundColor: shade }}
-                                                                            />
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-slate-200/80" />
-                                                                <div
-                                                                    className="absolute top-1/2 -translate-y-1/2 rounded-full"
-                                                                    style={{
-                                                                        left: `${planLeft}%`,
-                                                                        width: `${planWidth}%`,
-                                                                        minWidth: "48px",
-                                                                        height: "10px",
-                                                                        backgroundColor: "rgba(148,163,184,0.25)",
-                                                                        border: "1px dashed rgba(148,163,184,0.6)",
-                                                                        transition: "left 0.2s ease, width 0.2s ease",
-                                                                    }}
-                                                                    aria-hidden="true"
-                                                                />
-                                                                <div
-                                                                    className={`absolute top-1/2 flex h-7 -translate-y-1/2 items-center gap-2 overflow-hidden rounded-full px-2.5 text-[11px] font-semibold text-white shadow ring-1 ring-slate-200/70 ${item.isLate ? "gantt-late-stripes" : ""}`}
-                                                                    style={{
-                                                                        left: `${actualLeft}%`,
-                                                                        width: `${actualWidth}%`,
-                                                                        minWidth: "68px",
-                                                                        background: `${actualColor}`,
-                                                                        boxShadow: `0 10px 24px -16px ${actualColor}`,
-                                                                        transition: "left 0.2s ease, width 0.2s ease",
-                                                                    }}
-                                                                >
-                                                                    <span className="truncate">{item.subtaskTitle || item.taskTitle}</span>
-                                                                    <span className="rounded-full bg-white/95 px-2 py-[1px] text-[10px] font-semibold text-slate-700 shadow-sm">
-                                                                        {progressText}
-                                                                    </span>
-                                                                    {/* end-cap marker for readability */}
-                                                                    <span
-                                                                        className={`pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-white ${item.isLate ? 'ring-2 ring-rose-400' : item.isEarly ? 'ring-2 ring-emerald-500' : 'ring-2 ring-white/60'}`}
-                                                                        aria-hidden="true"
-                                                                    />
-                                                                    {/* in-bar update markers */}
-                                                                    <div className="absolute inset-0">
-                                                                        {inBarMarkers.map((marker, markerIndex) => (
-                                                                            <div
-                                                                                key={`${item.id}-inbar-${markerIndex}`}
-                                                                                className="absolute z-10 cursor-help"
-                                                                                style={{ left: `${Math.min(98, Math.max(2, marker.left))}%`, transform: "translateX(-50%)", width: "16px", top: 0, bottom: 0 }}
-                                                                                title={`${marker.progress != null ? marker.progress + '%' : ''} ${formatDateTime(marker.timestamp.toISOString())}`.trim()}
-                                                                            >
-                                                                                <div className="absolute top-1 bottom-1 left-1/2 w-[2px] -translate-x-1/2 rounded bg-white/90" />
-                                                                                {marker.progress != null && (
-                                                                                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/95 px-2 py-[1px] text-[10px] font-semibold text-primary-600 shadow">
-                                                                                        {marker.progress}%
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                                {updateMarkers.map((marker, markerIndex) => (
-                                                                    <div
-                                                                        key={`${item.id}-marker-${markerIndex}`}
-                                                                        className="absolute z-10 cursor-help"
-                                                                        style={{ left: `${marker.left}%`, transform: "translateX(-50%)", width: "16px", top: 0, bottom: 0 }}
-                                                                        title={`${marker.progress != null ? marker.progress + '%' : ''} ${formatDateTime(marker.timestamp.toISOString())}`.trim()}
-                                                                    >
-                                                                        <div className="absolute top-2 bottom-2 left-1/2 w-[2px] -translate-x-1/2 rounded bg-primary-400/70" />
-                                                                        {marker.progress != null && (
-                                                                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-2 py-[1px] text-[10px] font-semibold text-primary-500 shadow">
-                                                                                {marker.progress}%
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ))}
-                                        {ganttStatusLegend.length > 0 && (
-                                            <div className="flex flex-wrap items-center gap-4 border-t border-slate-200 bg-slate-50/60 px-4 py-3 text-xs font-semibold text-slate-500">
-                                                <span className="uppercase tracking-wide text-slate-400">{t('project.gantt_status_legend')}</span>
-                                                {ganttStatusLegend.map((status) => (
-                                                    <span key={status.label} className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 shadow-sm ring-1 ring-slate-200">
-                                                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color }} />
-                                                        <span className="text-slate-600">{status.label}</span>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                        <GanttView
+                            ganttItems={ganttItems}
+                            ganttRange={ganttRange}
+                            ganttColumns={ganttColumns}
+                            ganttScale={ganttScale}
+                            setGanttScale={setGanttScale}
+                            ganttScaleOptions={ganttScaleOptions}
+                            ganttScaleLabels={ganttScaleLabels}
+                            ganttStatusLegend={ganttStatusLegend}
+                            ganttGroups={ganttGroups}
+                            t={t}
+                            dateFormatter={(date, options) => new Intl.DateTimeFormat("th-TH", options).format(date)}
+                        />
+                    </>
                 )}
+
                 {activeTab === "workload" && (
-                    <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-base font-semibold text-slate-700">ภาพรวมทีม</h2>
-                            <button
-                                type="button"
-                                onClick={() => fetchWorkload()}
-                                disabled={isLoadingWorkload}
-                                className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary-200 hover:text-primary-600 disabled:opacity-70"
-                            >
-                                <FiRefreshCw className={isLoadingWorkload ? "animate-spin" : ""} size={14} /> รีเฟรช
-                            </button>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.4)]">
-                            {isLoadingWorkload ? (
-                                <p className="text-sm text-slate-500">กำลังโหลดข้อมูล...</p>
-                            ) : workloadError ? (
-                                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-600">{workloadError}</div>
-                            ) : workload.length === 0 ? (
-                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                                    ไม่มีข้อมูลคำแนะนำ
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="mb-6 overflow-x-auto">
-                                        <div className="min-w-[720px] rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                                            <div className="grid grid-cols-[220px_1fr_120px] items-center gap-3 px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                <span>สมาชิก</span>
-                                                <span>งานค้าง + งานช้า (stacked)</span>
-                                                <span className="text-center">% เฉลี่ย</span>
-                                            </div>
-                                            <div className="divide-y divide-slate-200">
-                                                {workload.map((row) => {
-                                                    const maxTotal = Math.max(1, (workloadMax.maxActive || 1) + (workloadMax.maxLate || 1));
-                                                    const total = Math.max(0, row.active + row.late);
-                                                    const activePart = total > 0 ? (row.active / total) * 100 : 0;
-                                                    const latePart = total > 0 ? (row.late / total) * 100 : 0;
-                                                    const scaled = Math.min(100, Math.max(8, (total / maxTotal) * 100));
-                                                    const avg = Math.max(0, Math.min(100, row.avgProgress));
-                                                    return (
-                                                        <div key={`chart-${row.userId}`} className="grid grid-cols-[220px_1fr_120px] items-center gap-3 px-2 py-2 text-xs">
-                                                            <span className="truncate font-semibold text-slate-700">{row.name}</span>
-                                                            <div className="relative h-4 rounded-full border border-slate-200 bg-white">
-                                                                <div className="absolute inset-y-0 left-0 rounded-l-full bg-slate-400/80" style={{ width: `${(scaled * activePart) / 100}%` }} />
-                                                                <div className="absolute inset-y-0 right-0 rounded-r-full bg-rose-400/90" style={{ width: `${(scaled * latePart) / 100}%` }} />
-                                                                <div className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-slate-600">
-                                                                    {row.active} งานค้าง · {row.late} งานช้า
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-center font-bold text-emerald-600">{avg}%</div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                        {workload.map((row, idx) => (
-                                            <div key={row.userId} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.35)]">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">{idx + 1}</span>
-                                                        <span className="font-semibold text-slate-800">{row.name}</span>
-                                                    </div>
-                                                    <span className="rounded-full bg-slate-100 px-2 py-[2px] text-[10px] font-semibold text-slate-600">score {row.score.toFixed(2)}</span>
-                                                </div>
-                                                <div className="grid grid-cols-3 gap-3 text-center">
-                                                    <div className="rounded-lg bg-slate-50 p-2">
-                                                        <div className="text-[10px] font-semibold text-slate-500">งานค้าง</div>
-                                                        <div className="text-base font-bold text-slate-800">{row.active}</div>
-                                                    </div>
-                                                    <div className="rounded-lg bg-slate-50 p-2">
-                                                        <div className="text-[10px] font-semibold text-slate-500">งานช้า</div>
-                                                        <div className="text-base font-bold text-rose-600">{row.late}</div>
-                                                    </div>
-                                                    <div className="rounded-lg bg-slate-50 p-2">
-                                                        <div className="text-[10px] font-semibold text-slate-500">เฉลี่ย %</div>
-                                                        <div className="text-base font-bold text-emerald-600">{row.avgProgress}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-600">{row.reason}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                    <WorkloadView
+                        workload={workload}
+                        isLoadingWorkload={isLoadingWorkload}
+                        workloadError={workloadError}
+                        fetchWorkload={fetchWorkload}
+                        workloadMax={workloadMax}
+                        t={t}
+                    />
                 )}
+
                 {selectedTask && (
                     <ModalDetailTask
                         isTaskModalOpen={isTaskModalOpen}

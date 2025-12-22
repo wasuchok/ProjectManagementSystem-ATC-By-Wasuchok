@@ -1,11 +1,11 @@
 import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
+    BadRequestException,
+    ForbiddenException,
+    Injectable,
+    NotFoundException,
+    UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, tb_project_members_status, $Enums } from 'generated/prisma';
+import { $Enums, Prisma, tb_project_members_status } from 'generated/prisma';
 import { ApiResponse } from 'src/common/dto/api-response.dto';
 import { EventsGateway } from 'src/event/events.gateway';
 import { PrismaService } from 'src/prisma.service';
@@ -1505,28 +1505,72 @@ export class ProjectService {
       return new ApiResponse('สถานะที่เลือกไม่ถูกต้อง', 400, null);
     }
 
-    const updatedTask = await this.prisma.tb_project_tasks.update({
-      where: { id: task_id },
-      data: {
-        status_id,
-        updated_at: new Date(),
-      },
-      include: {
-        user_account: true,
-        tb_project_task_statuses: true,
-        tb_project_sub_tasks: {
-          orderBy: { created_at: 'asc' },
-          include: {
-            tb_project_task_statuses: true,
-            tb_project_sub_task_assignees: {
-              include: {
-                user_account: true,
+    // Use transaction to ensure both task and subtasks are updated
+    const updatedTask = await this.prisma.$transaction(async (prisma) => {
+      // 1. Update parent task
+      const task = await prisma.tb_project_tasks.update({
+        where: { id: task_id },
+        data: {
+          status_id,
+          updated_at: new Date(),
+        },
+        include: {
+          user_account: true,
+          tb_project_task_statuses: true,
+          tb_project_sub_tasks: {
+            orderBy: { created_at: 'asc' },
+            include: {
+              tb_project_task_statuses: true,
+              tb_project_sub_task_assignees: {
+                include: {
+                  user_account: true,
+                },
               },
             },
           },
         },
-      },
+      });
+
+      // 2. Update all subtasks
+      await prisma.tb_project_sub_tasks.updateMany({
+        where: { task_id },
+        data: {
+          status_id,
+          updated_at: new Date(),
+        },
+      });
+
+      // 3. Refetch task with updated subtasks (optional, but ensures response is fresh)
+      // Or we can just return 'task' but subtasks in 'task' object might still have old status
+      // because 'include' happened before 'updateMany' finished?
+      // Actually 'update' returns the record. The 'include' fetches relations.
+      // If we update subtasks AFTER, the included subtasks in 'task' variable will have OLD status.
+      // So we should refetch or manually update the returned object.
+      // Let's refetch to be safe and clean.
+
+      return prisma.tb_project_tasks.findUnique({
+        where: { id: task_id },
+        include: {
+          user_account: true,
+          tb_project_task_statuses: true,
+          tb_project_sub_tasks: {
+            orderBy: { created_at: 'asc' },
+            include: {
+              tb_project_task_statuses: true,
+              tb_project_sub_task_assignees: {
+                include: {
+                  user_account: true,
+                },
+              },
+            },
+          },
+        },
+      });
     });
+
+    if (!updatedTask) {
+        return new ApiResponse('เกิดข้อผิดพลาดในการอัปเดต', 500, null);
+    }
 
     this.eventsGateway.broadcastToProject(
       existingTask.project_id,
@@ -1579,9 +1623,25 @@ export class ProjectService {
           if (!s) return;
           const progress = Number(sub.progress_percent ?? 0);
           const hasDue = sub.has_due_date === true && sub.due_date != null;
-          const isLate = progress < 100 && hasDue && sub.due_date! < now;
-          s.active += progress >= 100 ? 0 : 1;
-          s.late += isLate ? 1 : 0;
+
+          // Fix: Compare against end of due date
+          let isLate = false;
+          if (progress < 100 && hasDue && sub.due_date) {
+            const dueEnd = new Date(sub.due_date);
+            dueEnd.setHours(23, 59, 59, 999);
+            if (dueEnd < now) {
+              isLate = true;
+            }
+          }
+
+          if (progress < 100) {
+            if (isLate) {
+              s.late += 1;
+            } else {
+              s.active += 1;
+            }
+          }
+
           s.avgProgress += progress;
           s.total += 1;
         });
