@@ -1,6 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import axios from "axios";
+import { CONFIG } from "@/app/config";
+import { CustomAlert } from "../components/CustomAlertModal";
 
 interface User {
     id: number;
@@ -47,9 +50,22 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         }
     }, [user]);
 
-    const logout = () => {
+    const logout = async () => {
+        try {
+            await axios.post(`${CONFIG.apiUrl}/user-account/logout`, {}, { withCredentials: true });
+        } catch { }
         setUser(null);
-        localStorage.removeItem("user");
+        try {
+            localStorage.removeItem("user");
+        } catch { }
+        if (typeof window !== "undefined") {
+            await CustomAlert({
+                type: "info",
+                title: "ออกจากระบบ",
+                message: "ออกจากระบบเรียบร้อย",
+            });
+            window.location.href = "/login";
+        }
     };
 
     return (

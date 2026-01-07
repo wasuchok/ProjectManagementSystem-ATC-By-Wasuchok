@@ -20,6 +20,7 @@ interface FormValues {
     full_name: string;
     department: string;
     position: string;
+    branch: string;
 }
 
 const Page = () => {
@@ -43,6 +44,7 @@ const Page = () => {
             full_name: "",
             department: "",
             position: "",
+            branch: "",
         },
     });
 
@@ -99,6 +101,7 @@ const Page = () => {
             formDataAPI.append("full_name", data.full_name);
             formDataAPI.append("department", data.department);
             formDataAPI.append("position", data.position);
+            formDataAPI.append("branch", data.branch);
             formDataAPI.append("role", data.role);
 
             const storedUser = localStorage.getItem("user");
@@ -318,6 +321,20 @@ const Page = () => {
                                         )}
                                     />
                                     <Controller
+                                        name="branch"
+                                        control={control}
+                                        rules={{ required: t("please_fill_in_information") }}
+                                        render={({ field }) => (
+                                            <TextField
+                                                required
+                                                label={t("employee.branch")}
+                                                placeholder={t("please_fill_in_information")}
+                                                error={errors.branch?.message}
+                                                {...field}
+                                            />
+                                        )}
+                                    />
+                                    <Controller
                                         name="position"
                                         control={control}
                                         rules={{ required: t("please_fill_in_information") }}
@@ -392,6 +409,12 @@ const Page = () => {
                                 <dt className="text-slate-400">{t("employee.email")}</dt>
                                 <dd className="truncate font-medium text-slate-900">
                                     {previewValues.email || "name@example.com"}
+                                </dd>
+                            </div>
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                <dt className="text-slate-400">{t("employee.branch")}</dt>
+                                <dd className="truncate font-medium text-slate-900">
+                                    {previewValues.branch || t("employee.branch")}
                                 </dd>
                             </div>
                             <div className="flex items-center justify-between">

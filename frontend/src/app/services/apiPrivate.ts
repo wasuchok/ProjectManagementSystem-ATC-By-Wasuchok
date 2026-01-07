@@ -1,4 +1,5 @@
 // src/app/services/apiPrivate.ts
+import { CustomAlert } from "@/app/components/CustomAlertModal";
 import axios from "axios";
 import axiosInstance from "./axiosConfig";
 
@@ -54,7 +55,26 @@ axiosInstance.interceptors.response.use(
 
 
                 if (typeof window !== "undefined") {
-                    window.location.href = "/login";
+                    try {
+                        try {
+                            CustomAlert({
+                                type: "warning",
+                                title: "เซสชันหมดอายุ",
+                                message: "โปรดเข้าสู่ระบบใหม่",
+                            });
+                        } catch { }
+                        try {
+                            await axios.post(
+                                `${baseURL}/user-account/logout`,
+                                {},
+                                { withCredentials: true }
+                            );
+                        } catch { }
+                        try {
+                            localStorage.removeItem("user");
+                        } catch { }
+                        window.location.href = "/login";
+                    } catch { }
                 }
 
                 return Promise.reject(refreshError);

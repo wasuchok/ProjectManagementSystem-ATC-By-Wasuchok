@@ -21,6 +21,7 @@ interface FormValues {
     full_name: string;
     department: string;
     position: string;
+    branch: string;
 }
 
 const deriveRole = (user: any) => {
@@ -58,6 +59,7 @@ const Page = () => {
             full_name: "",
             department: "",
             position: "",
+            branch: "",
         },
     });
 
@@ -138,6 +140,7 @@ const Page = () => {
                     full_name: user.full_name || "",
                     department: user.department || "",
                     position: user.position || "",
+                    branch: user.branch || "",
                 });
                 const imgUrl = getImageUrl(user.image);
                 setServerImage(imgUrl);
@@ -195,6 +198,7 @@ const Page = () => {
             formDataAPI.append("full_name", data.full_name);
             formDataAPI.append("department", data.department);
             formDataAPI.append("position", data.position);
+            formDataAPI.append("branch", data.branch);
             formDataAPI.append("role", data.role);
             if (removeImage && !file) {
                 formDataAPI.append("remove_image", "true");
@@ -454,7 +458,21 @@ const Page = () => {
                                                     required
                                                     label={t("employee.department")}
                                                     placeholder={t("please_fill_in_information")}
-                                                    error={errors.department?.message}
+                                                error={errors.department?.message}
+                                                {...field}
+                                            />
+                                        )}
+                                        />
+                                        <Controller
+                                            name="branch"
+                                            control={control}
+                                            rules={{ required: t("please_fill_in_information") }}
+                                            render={({ field }) => (
+                                                <TextField
+                                                    required
+                                                    label={t("employee.branch")}
+                                                    placeholder={t("please_fill_in_information")}
+                                                    error={errors.branch?.message}
                                                     {...field}
                                                 />
                                             )}
@@ -524,6 +542,9 @@ const Page = () => {
                                     <p className="text-sm font-medium text-slate-700">
                                         {previewValues.department || t("employee.department")}
                                     </p>
+                                    <p className="text-sm font-medium text-slate-700">
+                                        {previewValues.branch || t("employee.branch")}
+                                    </p>
                                 </div>
                             </div>
 
@@ -538,6 +559,12 @@ const Page = () => {
                                     <dt className="text-slate-400">{t("employee.email")}</dt>
                                     <dd className="truncate font-medium text-slate-900">
                                         {previewValues.email || "name@example.com"}
+                                    </dd>
+                                </div>
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                    <dt className="text-slate-400">{t("employee.branch")}</dt>
+                                    <dd className="truncate font-medium text-slate-900">
+                                        {previewValues.branch || t("employee.branch")}
                                     </dd>
                                 </div>
                                 <div className="flex items-center justify-between">

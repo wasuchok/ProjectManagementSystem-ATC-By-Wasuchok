@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import BottomNav from "./BottomNav";
 import Header from "./Header";
 import ScrollToTopButton from "./ScrollToTopButton";
 import Sidebar from "./Sidebar";
@@ -26,13 +27,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     />
                 )}
 
-                <div className="flex flex-1 flex-col lg:ml-16 lg:px-10 lg:pt-5">
+                <div className="flex flex-1 flex-col xl:ml-16 xl:px-10 xl:pt-5">
                     <Header onToggle={toggleSidebar} />
-                    <main className="mt-4 flex-1">
+                    <main className="mt-4 flex-1 pb-16 xl:pb-0">
                         {children}
                     </main>
                 </div>
             </div>
+            <BottomNav />
             <ScrollToTopButton />
         </>
     );

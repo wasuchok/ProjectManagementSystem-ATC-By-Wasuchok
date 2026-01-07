@@ -7,7 +7,7 @@ const ReactSelect = dynamic(() => import("react-select"), { ssr: false });
 interface OptionListMultiProps {
     label?: string;
     values: string[];
-    options: { label: string; value: string }[];
+    options: { label: string; value: string; username?: string; branch?: string }[];
     onChange: (vals: string[]) => void;
     placeholder?: string;
     required?: boolean;
@@ -63,6 +63,30 @@ export default function OptionListMulti({
                     onChange={(selected: any) =>
                         onChange(selected ? selected.map((s: any) => s.value) : [])
                     }
+                    formatOptionLabel={(option: any, { context }: any) => {
+                        const name = option.username ?? option.label;
+                        const sect = option.branch;
+                        if (context === "value") {
+                            return (
+                                <div className="flex items-center gap-1">
+                                    <span className="truncate">{name}</span>
+                                    {sect ? (
+                                        <span className="ml-1 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
+                                            {sect}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            );
+                        }
+                        return (
+                            <div className="flex items-center justify-between">
+                                <span className="truncate">{name}</span>
+                                {sect ? (
+                                    <span className="ml-2 text-[11px] text-slate-500">{sect}</span>
+                                ) : null}
+                            </div>
+                        );
+                    }}
                     placeholder={placeholder}
                     className="react-select-container"
                     classNamePrefix="react-select"

@@ -1,10 +1,8 @@
 import LoadingSpinner from '@/app/components/LoadingSpinner';
 import { useLanguage } from '@/app/contexts/LanguageContext';
-import Lottie from 'lottie-react';
 import React, { ReactNode } from 'react';
-import { FiEye, FiTrash } from 'react-icons/fi';
+import { FiEye, FiTrash, FiUsers } from 'react-icons/fi';
 import { twMerge } from 'tailwind-merge';
-import Blank from '../../../../../public/blank.json';
 
 interface Column<T> {
     header: string;
@@ -73,7 +71,7 @@ export function ScrollableTable<T>({
                 </div>
             ) : !hasData ? (
                 <div className="py-12 text-center text-gray-400">
-                    <Lottie className="mx-auto h-36" animationData={Blank} loop autoplay />
+                    <FiUsers className="mx-auto h-10 w-10" />
                     <p className="mt-2 text-sm">{t('no_data_avaliable')}</p>
                 </div>
             ) : (
@@ -110,32 +108,32 @@ export function ScrollableTable<T>({
                                             </td>
                                         ))}
                                         <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                                    <div className="flex items-center gap-2">
-                                        {renderActions ? (
-                                            renderActions(row)
-                                        ) : (
-                                            <>
-                                                {onEdit && (
-                                                    <button
-                                                        onClick={() => onEdit(row)}
-                                                        className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-8 h-8 shadow-sm hover:shadow-md"
-                                                        title="View"
-                                                    >
-                                                        <FiEye size={16} className="font-bold" />
-                                                    </button>
+                                            <div className="flex items-center gap-2">
+                                                {renderActions ? (
+                                                    renderActions(row)
+                                                ) : (
+                                                    <>
+                                                        {onEdit && (
+                                                            <button
+                                                                onClick={() => onEdit(row)}
+                                                                className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-8 h-8 shadow-sm hover:shadow-md"
+                                                                title="View"
+                                                            >
+                                                                <FiEye size={16} className="font-bold" />
+                                                            </button>
+                                                        )}
+                                                        {onDelete && (
+                                                            <button
+                                                                onClick={() => onDelete(row)}
+                                                                className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-8 h-8 shadow-sm hover:shadow-md"
+                                                                title="Delete"
+                                                            >
+                                                                <FiTrash size={16} className="font-bold" />
+                                                            </button>
+                                                        )}
+                                                    </>
                                                 )}
-                                                {onDelete && (
-                                                    <button
-                                                        onClick={() => onDelete(row)}
-                                                        className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center w-8 h-8 shadow-sm hover:shadow-md"
-                                                        title="Delete"
-                                                    >
-                                                        <FiTrash size={16} className="font-bold" />
-                                                    </button>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

@@ -11,11 +11,10 @@ import { priorityTypes } from "@/app/config/data";
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
-import Lottie from "lottie-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
-import ProjectManagement from "../../../../../public/Comacon - planning.json";
+import { FiFlag } from "react-icons/fi";
 const Page = () => {
     const router = useRouter()
     const [users, setUsers] = useState([]);
@@ -44,8 +43,10 @@ const Page = () => {
             const response = await apiPrivate.get("/user-account/users?all=true");
             if (response.status === 200 || response.status === 201) {
                 const mapUsers = response.data.data.map((item: any) => ({
-                    label: `${item.username} ${item.sect}`,
+                    label: item.username,
                     value: item.user_id,
+                    username: item.username,
+                    branch: item.branch,
                 }));
                 setUsers(mapUsers);
             }
@@ -105,17 +106,31 @@ const Page = () => {
 
     return (
         <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="flex lg:flex-row flex-col-reverse gap-5">
-                <div className="flex flex-col">
-                    <div className="mb-5">
-                        <h1 className="text-2xl font-semibold">
-                            {t("project.create_title")}
-                        </h1>
-                        <p className="text-lg">{t("project.create_content")}</p>
-                        <hr />
+            <div className="space-y-6">
+                <div className="rounded-3xl border border-slate-200 bg-gradient-to-r from-primary-50 to-sky-50 p-5 xl:p-6">
+                    <div className="flex items-center justify-between gap-6">
+                        <div className="max-w-2xl">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1 text-xs font-semibold text-primary-700">
+                                <FiFlag size={14} />
+                                {t("project.title")}
+                            </div>
+                            <h1 className="mt-3 text-2xl font-bold text-slate-800">
+                                {t("project.create_title")}
+                            </h1>
+                            <p className="mt-2 text-sm text-slate-600">
+                                {t("project.create_content")}
+                            </p>
+                        </div>
+                        <img
+                            src="/Project Management.jpg"
+                            alt="Project overview"
+                            className="hidden md:block w-56 xl:w-64 h-auto rounded"
+                        />
                     </div>
+                </div>
 
-                    <div className="flex flex-col gap-3">
+                <div className="grid gap-6 xl:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
                         <Controller
                             name="project_name"
                             control={control}
@@ -130,7 +145,6 @@ const Page = () => {
                                 />
                             )}
                         />
-
                         <Controller
                             name="description"
                             control={control}
@@ -145,7 +159,9 @@ const Page = () => {
                                 />
                             )}
                         />
+                    </div>
 
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
                         <Controller
                             name="priority"
                             control={control}
@@ -161,7 +177,6 @@ const Page = () => {
                                 />
                             )}
                         />
-
                         <Controller
                             name="team"
                             control={control}
@@ -171,7 +186,6 @@ const Page = () => {
                                     label={t("project.team")}
                                     values={field.value || []}
                                     onChange={(newValues) => {
-
                                         if (user && user.id && !newValues.includes(user.id)) {
                                             newValues.push(user.id);
                                         }
@@ -183,7 +197,6 @@ const Page = () => {
                                 />
                             )}
                         />
-
                         <Controller
                             name="join"
                             control={control}
@@ -195,15 +208,10 @@ const Page = () => {
                                 />
                             )}
                         />
+                        <div className="pt-2 flex justify-end">
+                            <CustomButton className="rounded-full px-6">{t("project.create")}</CustomButton>
+                        </div>
                     </div>
-
-                    <div className="my-2 flex justify-end">
-                        <CustomButton>{t("project.create")}</CustomButton>
-                    </div>
-                </div>
-
-                <div className="lg:w-1/2">
-                    <Lottie animationData={ProjectManagement} loop autoplay />
                 </div>
             </div>
         </form>

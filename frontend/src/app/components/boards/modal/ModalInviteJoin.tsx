@@ -2,9 +2,7 @@
 
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
-import Lottie from "lottie-react";
-import { FaCheckCircle, FaTimesCircle, FaUser } from "react-icons/fa";
-import Team from "../../../../../public/team.json";
+import { FaCheckCircle, FaTimesCircle, FaUser, FaUsers } from "react-icons/fa";
 import { CustomAlert } from "../../CustomAlertModal";
 import MinimalModal from "../../MinimalModal";
 const ModalInviteJoin = ({ open, setOpen, projectInvite, fetchInviteCountProject, fetchAllProjectsByEmployee }: any) => {
@@ -109,11 +107,9 @@ const ModalInviteJoin = ({ open, setOpen, projectInvite, fetchInviteCountProject
                         </div>
                     ))
                 ) : (
-                    <div className="w-full flex flex-col items-center">
-                        <Lottie animationData={Team} className="w-1/2" loop autoplay />
-                        <p className="text-center text-gray-500  py-6">
-                            ไม่มีคำเชิญในขณะนี้
-                        </p>
+                    <div className="w-full flex flex-col items-center py-6 text-gray-500">
+                        <FaUsers className="h-10 w-10 mb-3" />
+                        <p>ไม่มีคำเชิญในขณะนี้</p>
                     </div>
                 )}
             </div>

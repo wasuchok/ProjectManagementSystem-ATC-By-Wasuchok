@@ -1,9 +1,9 @@
 import {
-    BadRequestException,
-    ForbiddenException,
-    Injectable,
-    NotFoundException,
-    UnauthorizedException,
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { $Enums, Prisma, tb_project_members_status } from 'generated/prisma';
 import { ApiResponse } from 'src/common/dto/api-response.dto';
@@ -17,6 +17,62 @@ export class ProjectService {
     private prisma: PrismaService,
     private eventsGateway: EventsGateway,
   ) { }
+
+  async joinByCode(userId: string | null, code?: string) {
+    if (!userId) {
+      throw new UnauthorizedException('ไม่พบข้อมูลผู้ใช้งาน');
+    }
+    const trimmed = (code ?? '').trim().toUpperCase();
+    if (!trimmed) {
+      throw new BadRequestException('กรุณากรอกโค้ดเข้าร่วม');
+    }
+
+    const project = await this.prisma.tb_project_projects.findFirst({
+      where: { join_enabled: true, join_code: trimmed },
+    });
+
+    if (!project) {
+      throw new NotFoundException('ไม่พบโปรเจกต์หรือปิดการเข้าร่วม');
+    }
+
+    const existingMember = await this.prisma.tb_project_members.findFirst({
+      where: { project_id: project.id, user_id: userId },
+    });
+
+    if (existingMember) {
+      if (existingMember.status === tb_project_members_status.joined) {
+        return new ApiResponse('เข้าร่วมโปรเจกต์แล้ว', 200, {
+          projectId: project.id,
+          status: existingMember.status,
+        });
+      }
+
+      await this.prisma.tb_project_members.update({
+        where: { id: existingMember.id },
+        data: {
+          status: tb_project_members_status.joined,
+          joined_at: new Date(),
+          is_active: true,
+        },
+      });
+    } else {
+      await this.prisma.tb_project_members.create({
+        data: {
+          project_id: project.id,
+          user_id: userId,
+          status: tb_project_members_status.joined,
+          invited_by: project.created_by ?? userId,
+          joined_at: new Date(),
+          is_active: true,
+        },
+      });
+    }
+
+    return new ApiResponse('เข้าร่วมโปรเจกต์สำเร็จ', 200, {
+      projectId: project.id,
+      projectName: project.name,
+    });
+  }
   private generateJoinCode(length = 6): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -184,16 +240,27 @@ export class ProjectService {
 
     const userId = filters?.created_by;
 
-    const where: any = {
-      ...(filters?.status && { status: filters.status }),
-      ...(filters?.priority && { priority: filters.priority }),
-      ...(filters?.search && {
+    const andConditions: any[] = [];
+
+    if (filters?.status) {
+      andConditions.push({ status: filters.status });
+    }
+
+    if (filters?.priority) {
+      andConditions.push({ priority: filters.priority });
+    }
+
+    if (filters?.search) {
+      andConditions.push({
         OR: [
           { name: { contains: filters.search, mode: 'insensitive' } },
           { description: { contains: filters.search, mode: 'insensitive' } },
         ],
-      }),
-      ...(userId && {
+      });
+    }
+
+    if (userId) {
+      andConditions.push({
         OR: [
           { created_by: userId },
           {
@@ -205,8 +272,10 @@ export class ProjectService {
             },
           },
         ],
-      }),
-    };
+      });
+    }
+
+    const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const [projects, total] = await this.prisma.$transaction([
       this.prisma.tb_project_projects.findMany({
@@ -408,7 +477,7 @@ export class ProjectService {
     const { project_id, title, description, status_id, assigned_to, priority } =
       data;
 
-    const newProject = await this.prisma.tb_project_tasks.create({
+    const newTask = await this.prisma.tb_project_tasks.create({
       data: {
         project_id,
         title,
@@ -417,9 +486,29 @@ export class ProjectService {
         assigned_to,
         priority,
       },
+      include: {
+        user_account: true,
+        tb_project_task_statuses: true,
+        tb_project_sub_tasks: {
+          orderBy: { created_at: 'asc' },
+          include: {
+            tb_project_task_statuses: true,
+            tb_project_sub_task_assignees: {
+              include: {
+                user_account: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    return new ApiResponse('เพิ่มสถานะหัวข้องานสำเร็จ', 200, newProject);
+    this.eventsGateway.broadcastToProject(project_id, 'project:task:created', {
+      projectId: project_id,
+      task: newTask,
+    });
+
+    return new ApiResponse('เพิ่มสถานะหัวข้องานสำเร็จ', 200, newTask);
   }
 
   async getTaskProject(project_id: number) {
@@ -759,21 +848,23 @@ export class ProjectService {
       return new ApiResponse('ไม่พบงานย่อยที่ต้องการ', 404, null);
     }
 
-    const isAssignee = subtask.tb_project_sub_task_assignees.some(
-      (assignee) => assignee.user_id === userId,
-    );
-
-    if (!isAssignee) {
-      return new ApiResponse('คุณไม่มีสิทธิ์อัปเดตงานย่อยนี้', 403, null);
-    }
-
     const task = await this.prisma.tb_project_tasks.findUnique({
       where: { id: task_id },
-      select: { id: true, project_id: true },
+      select: { id: true, project_id: true, assigned_to: true },
     });
 
     if (!task) {
       return new ApiResponse('ไม่พบหัวข้องานที่ต้องการ', 404, null);
+    }
+
+    const isAssignee = subtask.tb_project_sub_task_assignees.some(
+      (assignee) => assignee.user_id === userId,
+    );
+    const isTaskOwner =
+      task.assigned_to != null && String(task.assigned_to) === String(userId);
+
+    if (!isAssignee && !isTaskOwner) {
+      return new ApiResponse('คุณไม่มีสิทธิ์อัปเดตงานย่อยนี้', 403, null);
     }
 
     // ✅ เก็บค่าเก่าก่อนอัปเดต
@@ -1206,17 +1297,17 @@ export class ProjectService {
     let targetUser =
       providedUserId != null
         ? await this.prisma.user_account.findUnique({
-            where: { user_id: providedUserId },
-            select: {
-              user_id: true,
-              username: true,
-              full_name: true,
-              email: true,
-              department: true,
-              position: true,
-              image: true,
-            },
-          })
+          where: { user_id: providedUserId },
+          select: {
+            user_id: true,
+            username: true,
+            full_name: true,
+            email: true,
+            department: true,
+            position: true,
+            image: true,
+          },
+        })
         : null;
 
     if (!targetUser && providedUsername) {
@@ -1484,6 +1575,117 @@ export class ProjectService {
     return new ApiResponse('อัปเดตสถานะโปรเจกต์สำเร็จ', 200, updatedProject);
   }
 
+  async deleteProject(
+    project_id: number,
+    userId: string,
+    roles: string[],
+  ) {
+    if (!project_id) {
+      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+    }
+
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      select: {
+        id: true,
+        created_by: true,
+      },
+    });
+
+    if (!project) {
+      return new ApiResponse('ไม่พบโปรเจกต์ที่ระบุ', 404, null);
+    }
+
+    const normalizedUserId = userId != null ? String(userId) : '';
+    const isOwner =
+      project.created_by != null &&
+      String(project.created_by) === normalizedUserId;
+
+    const normalizedRoles = Array.isArray(roles)
+      ? roles.map((role) => String(role).toLowerCase())
+      : [];
+    const hasPrivilegedRole = normalizedRoles.some((role) =>
+      ['admin', 'staff'].includes(role),
+    );
+
+    if (!isOwner && !hasPrivilegedRole) {
+      return new ApiResponse('คุณไม่มีสิทธิ์ลบโปรเจกต์นี้', 403, null);
+    }
+
+    try {
+      // Deleting project will cascade delete related data if Prisma schema is configured correctly
+      // Otherwise, we might need to delete related records first manually
+      const deletedProject = await this.prisma.$transaction(async (prisma) => {
+        // 1. Get all tasks in the project
+        const tasks = await prisma.tb_project_tasks.findMany({
+          where: { project_id },
+          select: { id: true },
+        });
+        const taskIds = tasks.map((t) => t.id);
+
+        if (taskIds.length > 0) {
+          // 2. Get all subtasks to clean up their related data
+          const subtasks = await prisma.tb_project_sub_tasks.findMany({
+            where: { task_id: { in: taskIds } },
+            select: { id: true },
+          });
+          const subtaskIds = subtasks.map((s) => s.id);
+
+          // 3. Delete subtask assignees
+          if (subtaskIds.length > 0) {
+            await prisma.tb_project_sub_task_assignees.deleteMany({
+              where: { subtask_id: { in: subtaskIds } },
+            });
+          }
+
+          // 4. Delete task logs (referencing tasks and subtasks)
+          await prisma.tb_project_task_logs.deleteMany({
+            where: { task_id: { in: taskIds } },
+          });
+
+          // 5. Delete subtasks
+          await prisma.tb_project_sub_tasks.deleteMany({
+            where: { task_id: { in: taskIds } },
+          });
+
+          // 6. Delete task comments
+          await prisma.tb_project_task_comments.deleteMany({
+            where: { task_id: { in: taskIds } },
+          });
+
+          // 7. Delete tasks
+          await prisma.tb_project_tasks.deleteMany({
+            where: { id: { in: taskIds } },
+          });
+        }
+
+        // 8. Delete task statuses (must be after tasks/subtasks because they reference statuses)
+        await prisma.tb_project_task_statuses.deleteMany({
+          where: { project_id },
+        });
+
+        // 9. Delete project members
+        await prisma.tb_project_members.deleteMany({
+          where: { project_id },
+        });
+
+        // 10. Finally delete the project
+        return prisma.tb_project_projects.delete({
+          where: { id: project_id },
+        });
+      });
+
+      this.eventsGateway.broadcastToProject(project_id, 'project:deleted', {
+        projectId: project_id,
+      });
+
+      return new ApiResponse('ลบโปรเจกต์สำเร็จ', 200, deletedProject);
+    } catch (error) {
+      console.error('❌ deleteProject Error:', error);
+      return new ApiResponse('เกิดข้อผิดพลาดในการลบโปรเจกต์', 500, error);
+    }
+  }
+
   async moveTask(task_id: number, status_id: number) {
     if (!status_id) {
       return new ApiResponse('กรุณาระบุสถานะใหม่', 400, null);
@@ -1569,7 +1771,7 @@ export class ProjectService {
     });
 
     if (!updatedTask) {
-        return new ApiResponse('เกิดข้อผิดพลาดในการอัปเดต', 500, null);
+      return new ApiResponse('เกิดข้อผิดพลาดในการอัปเดต', 500, null);
     }
 
     this.eventsGateway.broadcastToProject(

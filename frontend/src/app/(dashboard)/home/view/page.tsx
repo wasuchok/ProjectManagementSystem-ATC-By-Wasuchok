@@ -101,6 +101,15 @@ const Page = () => {
         return { counts, total, avgProgress };
     }, [projects]);
 
+    const personalTaskSummary = useMemo(
+        () => ({
+            total: personalTasks.length,
+            urgent: personalTasks.filter((task) => task.priority === "urgent").length,
+            high: personalTasks.filter((task) => task.priority === "high").length,
+        }),
+        [personalTasks],
+    );
+
     const fetchProjects = async () => {
         if (!user?.id) return;
 
@@ -169,11 +178,14 @@ const Page = () => {
                 const filtered = fetchedTasks
                     .filter((task: any) => String(task.assigned_to ?? task.assignedTo ?? "") === userId)
                     .map((task: any) => {
-                        const dueDates = (task.tb_project_sub_tasks ?? [])
+                        const dueDates: Date[] = (task.tb_project_sub_tasks ?? [])
                             .map((sub: any) => new Date(sub.due_date ?? sub.dueDate ?? null))
                             .filter((date: Date) => date instanceof Date && !Number.isNaN(date.getTime()));
                         const soonestDue = dueDates.length
-                            ? dueDates.reduce((min, current) => (current < min ? current : min))
+                            ? dueDates.reduce<Date>(
+                                (min, current) => (current < min ? current : min),
+                                dueDates[0],
+                            )
                             : null;
 
                         const progress = Math.min(100, Math.max(0, Number(task.progress_percent ?? task.progressPercent ?? 0)));
@@ -231,7 +243,7 @@ const Page = () => {
         },
         {
             label: "งานของฉัน",
-            value: personalTasks.length,
+            value: personalTaskSummary.total,
             hint: "งานปัจจุบันที่ตกลงรับผิดชอบ",
         },
     ];
@@ -255,7 +267,7 @@ const Page = () => {
                         {heroStats.map((stat) => (
                             <div
                                 key={stat.label}
-                                className="rounded-2xl bg-slate-50 px-4 py-3 text-slate-800 shadow-inner"
+                                className="rounded-2xl bg-slate-50 px-4 py-3 text-slate-800 shadow-inner transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-md"
                             >
                                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                     {stat.label}
@@ -270,16 +282,21 @@ const Page = () => {
 
             <section className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-4">
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
                                 สถานะโปรเจกต์
                             </p>
                             <h2 className="text-xl font-semibold text-slate-900">แผนภาพโดยรวม</h2>
                         </div>
-                        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                            {statusSummary.total} โปรเจกต์
-                        </span>
+                        <div className="flex flex-col items-end gap-1 text-right">
+                            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                {statusSummary.total} โปรเจกต์
+                            </span>
+                            <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                ความคืบหน้าเฉลี่ย {Math.round(statusSummary.avgProgress)}%
+                            </span>
+                        </div>
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
                         {STATUS_PRESETS.map((status) => {
@@ -290,7 +307,7 @@ const Page = () => {
                             return (
                                 <div
                                     key={status.key}
-                                    className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+                                    className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md"
                                 >
                                     <div className="flex items-center justify-between gap-3">
                                         <div>
@@ -327,15 +344,22 @@ const Page = () => {
                     </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-100 bg-white/90 p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
+                    <div className="rounded-3xl border border-slate-100 bg-white/90 p-5 shadow-sm">
+                    <div className="flex items-center justify-between gap-4">
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
                                 งานของฉัน
                             </p>
                             <h2 className="text-lg font-semibold text-slate-900">ติดตามงานส่วนบุคคล</h2>
                         </div>
-                        <span className="text-xs text-slate-400">({personalTasks.length} รายการ)</span>
+                        <div className="flex flex-col items-end gap-1 text-right">
+                            <span className="text-xs text-slate-400">
+                                ทั้งหมด {personalTaskSummary.total} งาน
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                                ด่วนมาก {personalTaskSummary.urgent} · ระดับสูง {personalTaskSummary.high}
+                            </span>
+                        </div>
                     </div>
 
                     <div className="mt-4 space-y-3">
@@ -345,14 +369,20 @@ const Page = () => {
                             <p className="text-sm text-slate-500">
                                 ยังไม่มีงานใหม่ในโปรเจกต์ที่คุณดูอยู่ ณ ขณะนี้
                             </p>
-                        ) : (
+                                ) : (
                             personalTasks.map((task) => {
                                 const priorityBadge =
                                     PRIORITY_BADGES[task.priority] ?? PRIORITY_BADGES.normal;
+                                const cardPriorityClass =
+                                    task.priority === "urgent"
+                                        ? "border-rose-200 ring-1 ring-rose-100"
+                                        : task.priority === "high"
+                                        ? "border-amber-200"
+                                        : "border-slate-100";
                                 return (
                                     <div
                                         key={task.id}
-                                        className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+                                        className={`rounded-2xl border bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${cardPriorityClass}`}
                                     >
                                         <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
                                             <div className="flex items-center gap-2">

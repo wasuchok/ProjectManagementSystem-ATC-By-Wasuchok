@@ -23,8 +23,11 @@ export class RolesGuard implements CanActivate {
             request.user = payload;
 
             return requiredRoles.some((role) => payload.roles?.includes(role));
-        } catch {
-            throw new UnauthorizedException('Token ไม่ถูกต้องหรือหมดอายุ');
+        } catch (err: any) {
+            if (err?.name === 'TokenExpiredError') {
+                throw new UnauthorizedException('TOKEN_EXPIRED');
+            }
+            throw new UnauthorizedException('TOKEN_INVALID');
         }
     }
 }

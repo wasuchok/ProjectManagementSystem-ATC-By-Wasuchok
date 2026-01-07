@@ -5,11 +5,9 @@ import TextField from "@/app/components/Input/TextField";
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPublic } from "@/app/services/apiPublic";
-import Lottie from "lottie-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import Developer from "../../../../public/Developer.json";
 
 type FormValues = {
     username: string;
@@ -123,8 +121,11 @@ const LoginPage = () => {
 
 
             <div className="flex-1 flex items-center justify-center bg-primary-500 p-4">
-                <div>
-                    <Lottie animationData={Developer} loop autoplay />
+                <div className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-white text-sm">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" className="opacity-80">
+                        <path d="M10 2h4v2h-4V2zm-7 9h18v2H3v-2zm3 7h12v2H6v-2z" />
+                    </svg>
+                    Project Management System
                 </div>
             </div>
 

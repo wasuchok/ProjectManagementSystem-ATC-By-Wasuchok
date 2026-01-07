@@ -238,8 +238,15 @@ export default function KanbanBoard() {
             ? boards.find((board) => board.id === subtask.statusId)
             : undefined;
 
-        const rawProgress = subtask.progressPercent ?? (subtask as any).progress_percent != null ? String((subtask as any).progress_percent) : undefined;
-        const progressNum = rawProgress != null && !Number.isNaN(Number(rawProgress)) ? Number(rawProgress) : null;
+        const rawProgress =
+            subtask.progressPercent ??
+            ((subtask as any).progress_percent != null
+                ? String((subtask as any).progress_percent)
+                : undefined);
+        const progressNum =
+            rawProgress != null && !Number.isNaN(Number(rawProgress))
+                ? Number(rawProgress)
+                : null;
         const isComplete = progressNum != null && progressNum >= 100;
         const existingCompleted = subtask.completedDate ?? (subtask as any).completed_date ?? undefined;
         const computedCompletedDate = isComplete ? (existingCompleted ?? new Date().toISOString()) : undefined;
@@ -1315,6 +1322,14 @@ export default function KanbanBoard() {
         socketRef.current = socket;
         if (!socket.connected) socket.connect();
 
+        const handleTaskCreated = (payload: any) => {
+            if (!payload) return;
+            if (Number(payload.projectId) !== Number(projectId)) return;
+            if (!payload.task) return;
+            const normalizedTask = normalizeTaskData(payload.task);
+            updateBoardsWithTask(normalizedTask, null);
+        };
+
         const handleTaskMoved = (payload: TaskMovedEvent) => {
             if (!payload) return;
             if (Number(payload.projectId) !== Number(projectId)) return;
@@ -1324,10 +1339,12 @@ export default function KanbanBoard() {
         };
 
         socket.emit("joinProject", projectId);
+        socket.on("project:task:created", handleTaskCreated);
         socket.on("project:task:moved", handleTaskMoved);
 
         return () => {
             socket.emit("leaveProject", projectId);
+            socket.off("project:task:created", handleTaskCreated);
             socket.off("project:task:moved", handleTaskMoved);
         };
     }, [projectId, accessChecked, accessDenied, normalizeTaskData, updateBoardsWithTask]);
@@ -1646,6 +1663,7 @@ export default function KanbanBoard() {
                         onSubtaskCreated={handleSubtaskUpsert}
                         onTaskProgressChanged={handleTaskProgressChanged}
                         projectReadOnly={isReadOnlyStatus}
+                        isProjectOwner={isProjectOwner}
                     />
                 )}
 

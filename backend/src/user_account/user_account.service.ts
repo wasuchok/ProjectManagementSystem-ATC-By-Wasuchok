@@ -22,7 +22,7 @@ export class UserAccountService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) {}
+  ) { }
 
   async register(registerUserDto: RegisterUserDto, file?: Express.Multer.File) {
     const profileImagePath = file?.path || null;
@@ -35,6 +35,7 @@ export class UserAccountService {
       position,
       create_by,
       role,
+      branch,
     } = registerUserDto;
 
     const hashedPassword = await argon2.hash(password);
@@ -75,6 +76,7 @@ export class UserAccountService {
       create_by,
       v_admin,
       v_create,
+      sect: branch,
     };
 
     if (profileImagePath) {
@@ -134,12 +136,14 @@ export class UserAccountService {
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
       sameSite: 'lax',
+      secure: false, // ❗ http
       maxAge: 24 * 60 * 60 * 1000,
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       sameSite: 'lax',
+      secure: false,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -157,7 +161,11 @@ export class UserAccountService {
     @Res({ passthrough: true }) res: Response,
     refreshToken: string,
   ) {
-    if (!refreshToken) throw new UnauthorizedException('ไม่มี Refresh Token');
+    if (!refreshToken) {
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      throw new UnauthorizedException('ไม่มี Refresh Token');
+    }
 
     try {
       const payload = await this.jwtService.verifyAsync(refreshToken, {
@@ -195,6 +203,8 @@ export class UserAccountService {
       return new ApiResponse('ออก Token ใหม่สำเร็จ', 200, {});
     } catch (err) {
       console.error('Refresh Error:', err);
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
       throw new UnauthorizedException('Refresh Token หมดอายุหรือไม่ถูกต้อง');
     }
   }
@@ -245,14 +255,14 @@ export class UserAccountService {
         status !== undefined ? { status: Number(status) } : {},
         search
           ? {
-              OR: [
-                { username: { contains: search } },
-                { full_name: { contains: search } },
-                { email: { contains: search } },
-                { department: { contains: search } },
-                { position: { contains: search } },
-              ],
-            }
+            OR: [
+              { username: { contains: search } },
+              { full_name: { contains: search } },
+              { email: { contains: search } },
+              { department: { contains: search } },
+              { position: { contains: search } },
+            ],
+          }
           : {},
       ],
     };
@@ -298,19 +308,22 @@ export class UserAccountService {
     }
 
     const sanitizedUsers = users.map(
-      ({ password_hash, refresh_token, ...rest }) => rest,
+      ({ password_hash, refresh_token, sect, ...rest }) => ({
+        ...rest,
+        branch: sect,
+      }),
     );
 
     const responseData =
       allowAll
         ? sanitizedUsers
         : {
-            total,
-            page: effectivePage,
-            totalPages: effectiveTotalPages,
-            limit: effectiveLimit,
-            data: sanitizedUsers,
-          };
+          total,
+          page: effectivePage,
+          totalPages: effectiveTotalPages,
+          limit: effectiveLimit,
+          data: sanitizedUsers,
+        };
 
     return new ApiResponse('เรียกข้อมูลผู้ใช้ทั้งหมด', 200, responseData);
   }
@@ -324,9 +337,12 @@ export class UserAccountService {
       throw new NotFoundException('ไม่พบผู้ใช้');
     }
 
-    const { password_hash, refresh_token, ...sanitizedUser } = user;
+    const { password_hash, refresh_token, sect, ...sanitizedUser } = user;
 
-    return new ApiResponse('เรียกข้อมูลผู้ใช้', 200, sanitizedUser);
+    return new ApiResponse('เรียกข้อมูลผู้ใช้', 200, {
+      ...sanitizedUser,
+      branch: sect,
+    });
   }
 
   async update(
@@ -380,6 +396,9 @@ export class UserAccountService {
     }
     if (updateUserDto.position !== undefined) {
       data.position = updateUserDto.position;
+    }
+    if (updateUserDto.branch !== undefined) {
+      data.sect = updateUserDto.branch;
     }
 
     if (updateUserDto.role) {

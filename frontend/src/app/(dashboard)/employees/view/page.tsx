@@ -114,6 +114,7 @@ const Page = () => {
     };
 
     const selfRow = useMemo(() => data.find((item) => item.isSelf), [data]);
+    const selfImageUrl = useMemo(() => getImageUrl(selfRow?.image), [selfRow]);
     const tableRows = useMemo(() => data.filter((item) => !item.isSelf), [data]);
 
     useEffect(() => {
@@ -207,9 +208,9 @@ const Page = () => {
                 <div className="rounded-3xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-white p-5 shadow-[0_20px_40px_rgba(15,23,42,0.12)]">
                     <div className="grid items-center gap-4 md:grid-cols-[auto_1fr_auto]">
                         <div className="flex items-center gap-4">
-                            {selfRow.image ? (
+                            {selfImageUrl ? (
                                 <img
-                                    src={getImageUrl(selfRow.image)}
+                                    src={selfImageUrl}
                                     alt={selfRow.full_name || "profile"}
                                     width={52}
                                     height={52}

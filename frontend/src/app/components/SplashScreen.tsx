@@ -1,8 +1,5 @@
 'use client';
-import Lottie from 'lottie-react';
 import { useEffect, useState } from 'react';
-
-import loadingAnimation from '../../../public/Comacon - planning.json';
 
 export default function SplashScreen() {
     const [visible, setVisible] = useState(true);
@@ -46,16 +43,7 @@ export default function SplashScreen() {
                 ${isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}
             `}
         >
-            <div className="w-1/3 ">
-                <Lottie
-                    animationData={loadingAnimation}
-                    loop={true}
-                    autoplay={true}
-                    rendererSettings={{
-                        preserveAspectRatio: 'xMidYMid slice'
-                    }}
-                />
-            </div>
+            <div className="w-14 h-14 rounded-full border-2 border-slate-300 border-t-primary-600 animate-spin" />
 
             <div className="text-center px-4 space-y-4">
                 <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 animate-fade-in-down [animation-delay:0.2s]">

@@ -206,3 +206,12 @@ enum tb_project_tasks_priority {
   high
   urgent
 }
+
+model system_setting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String?
+  type        String?
+  description String?
+  updated_at  DateTime @default(now()) @updatedAt
+}

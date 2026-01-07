@@ -157,6 +157,7 @@ type ModalDetailTaskProps = {
     onSubtaskUpdated?: (taskId: string, subtask: SubtaskSummary) => void;
     onSubtaskCreated?: (taskId: string, subtask: SubtaskSummary) => void;
     projectReadOnly?: boolean;
+    isProjectOwner?: boolean;
 };
 
 const ModalDetailTask = ({
@@ -173,6 +174,7 @@ const ModalDetailTask = ({
     onSubtaskUpdated,
     onSubtaskCreated,
     projectReadOnly = false,
+    isProjectOwner = false,
 }: ModalDetailTaskProps) => {
     const { t } = useLanguage()
     const isReadOnly = Boolean(projectReadOnly);
@@ -1097,8 +1099,11 @@ const ModalDetailTask = ({
                                     const canManage =
                                         !isReadOnly &&
                                         !!currentUserId &&
-                                        (subtask.assignees ?? []).some(
-                                            (assignee) => assignee.userId === currentUserId
+                                        (
+                                            isProjectOwner ||
+                                            (subtask.assignees ?? []).some(
+                                                (assignee) => assignee.userId === currentUserId
+                                            )
                                         );
                                     const isEditing = editingSubtaskId === subtask.id;
 

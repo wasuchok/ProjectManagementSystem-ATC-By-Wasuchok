@@ -7,4 +7,5 @@ export class RegisterUserDto {
     position: string
     create_by: string
     role: string
+    branch?: string
 }

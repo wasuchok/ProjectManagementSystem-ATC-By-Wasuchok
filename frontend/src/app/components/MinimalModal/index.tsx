@@ -58,33 +58,32 @@ const MinimalModal: React.FC<MinimalModalProps> = ({
                 >
 
                     <motion.div
-                        className={`relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-xl shadow-slate-900/10 ${width}`}
-                        initial={{ y: 12, opacity: 0.85, scale: 0.97 }}
+                        className={`relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white/95 shadow-xl shadow-slate-900/10 ${width}`}
+                        initial={{ y: 16, opacity: 0.85, scale: 0.96 }}
                         animate={{ y: 0, opacity: 1, scale: 1 }}
-                        exit={{ y: 12, opacity: 0 }}
-                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        exit={{ y: 8, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: "easeOut" }}
                         onMouseDown={(event) => event.stopPropagation()}
                     >
-
                         {title && (
-                            <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-100 bg-white/80 px-6 py-4">
-                                <div className="flex flex-col">
-                                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                            <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-100 bg-white/90 px-6 py-4 backdrop-blur-sm">
+                                <div className="flex flex-col gap-1">
+                                    <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.18)]" />
                                         Modal
                                     </span>
-                                    <h2 className="text-lg font-semibold text-slate-800">
-                                    {title}
-                                </h2>
+                                    <h2 className="text-lg font-semibold text-slate-800 leading-snug">
+                                        {title}
+                                    </h2>
                                 </div>
                                 <button
                                     onClick={onClose}
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-slate-400 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-transparent bg-white/0 text-slate-400 transition-all duration-150 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:ring-offset-1"
                                 >
                                     <FiX size={18} />
                                 </button>
                             </div>
                         )}
-
 
                         <div className="flex-1 overflow-y-auto px-6 py-5">
                             {children}

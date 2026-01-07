@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { FaChevronDown, FaLaptop, FaUser } from "react-icons/fa";
+import { FiMenu } from "react-icons/fi";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useUser } from "../contexts/UserContext";
 import { apiPrivate } from "../services/apiPrivate";
@@ -64,8 +65,18 @@ const Header = ({ onToggle }: HeaderProps) => {
 
     return (
         <header className="bg-white border border-slate-100 shadow-sm lg:rounded-xl">
-            <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-1.5">
+            <div className="mx-auto w-full flex items-center justify-end gap-3 px-4 py-2">
 
+                <div className="flex items-center gap-2">
+                    {/* Hamburger ซ่อนบนมือถือและทุกขนาดจอ (BottomNav ใช้นำทางบนมือถือแทน) */}
+                    <button
+                        onClick={onToggle}
+                        className="hidden"
+                        aria-label="Toggle menu"
+                    >
+                        <FiMenu className="h-5 w-5" />
+                    </button>
+                </div>
 
                 <div className="relative lang-dropdown">
                     <button

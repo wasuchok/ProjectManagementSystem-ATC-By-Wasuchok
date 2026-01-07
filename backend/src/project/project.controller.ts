@@ -63,6 +63,20 @@ export class ProjectController {
     return this.projectService.readInviteCount(userId);
   }
 
+  @Post('join-code')
+  @Roles('admin', 'staff', 'employee')
+  async joinByCode(@Body('code') code: string, @Req() req: Request) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : null;
+
+    return this.projectService.joinByCode(userId, code);
+  }
+
   @Put('update/invite')
   @Roles('admin', 'staff', 'employee')
   async updateStatusInviteProject(
@@ -353,6 +367,34 @@ export class ProjectController {
     return this.projectService.updateProjectStatus(
       Number(project_id),
       status,
+      userId,
+      roles,
+    );
+  }
+
+  @Delete('/:project_id')
+  @Roles('admin', 'staff', 'employee')
+  async deleteProject(
+    @Param('project_id') project_id: string,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : '';
+    const roles: string[] = Array.isArray(authUser?.roles)
+      ? authUser.roles.map((role: any) => String(role))
+      : [];
+
+    if (!userId) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 401, null);
+    }
+
+    return this.projectService.deleteProject(
+      Number(project_id),
       userId,
       roles,
     );

@@ -1,11 +1,14 @@
-﻿"use client";
+"use client";
 
+import VirtualizedList from "@/app/components/boards/modal/VirtualizedList";
+import TextField from "@/app/components/Input/TextField";
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { encodeSingleHashid } from "@/app/utils/hashids";
 import { getImageUrl } from "@/app/utils/imagePath";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import {
     memo,
     useCallback,
@@ -28,9 +31,6 @@ import {
     FiUsers,
     FiX,
 } from "react-icons/fi";
-import TextField from "@/app/components/Input/TextField";
-import VirtualizedList from "@/app/components/boards/modal/VirtualizedList";
-import { useParams, useRouter } from "next/navigation";
 
 const PRIORITY_META = {
     urgent: {
@@ -280,7 +280,7 @@ const ProjectDetailPage = () => {
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const projectIdParam = params?.id ?? null;
-    const { t } = useLanguage();
+    const { t, lang } = useLanguage();
     const { user } = useUser();
     const [project, setProject] = useState<any | null>(null);
     const [isProjectLoading, setIsProjectLoading] = useState(true);
@@ -537,7 +537,8 @@ const ProjectDetailPage = () => {
         if (!project?.created_at) return "-";
         try {
             const date = new Date(project.created_at);
-            return date.toLocaleString(undefined, {
+            const locale = lang === "TH" ? "th-TH" : "en-US";
+            return date.toLocaleString(locale, {
                 day: "2-digit",
                 month: "short",
                 year: "numeric",
@@ -547,7 +548,7 @@ const ProjectDetailPage = () => {
         } catch {
             return project?.created_at;
         }
-    }, [project?.created_at]);
+    }, [lang, project?.created_at]);
 
     const resolvedOwnerLabel = t("project.owner_label");
     const ownerMetricLabel =
@@ -557,17 +558,21 @@ const ProjectDetailPage = () => {
 
     const quickActionsRaw = t("project.quick_actions");
     const quickActionsLabelText =
-        quickActionsRaw && quickActionsRaw !== "project.quick_actions" ? quickActionsRaw : "Quick actions";
+        quickActionsRaw && quickActionsRaw !== "project.quick_actions"
+            ? quickActionsRaw
+            : "การจัดการด่วน";
 
     const quickSummaryRaw = t("project.quick_summary");
     const quickSummaryLabel =
-        quickSummaryRaw && quickSummaryRaw !== "project.quick_summary" ? quickSummaryRaw : "Snapshot";
+        quickSummaryRaw && quickSummaryRaw !== "project.quick_summary"
+            ? quickSummaryRaw
+            : "ภาพรวมล่าสุด";
 
     const quickSummaryTitleRaw = t("project.quick_summary_title");
     const quickSummaryTitle =
         quickSummaryTitleRaw && quickSummaryTitleRaw !== "project.quick_summary_title"
             ? quickSummaryTitleRaw
-            : "Team snapshot";
+            : "ภาพรวมทีม";
 
     const projectDisplayName = project?.projectName || project?.name || t("project.project_name");
     const projectDescription = project?.description || t("project.detail_project_desc");
@@ -588,8 +593,37 @@ const ProjectDetailPage = () => {
         ],
         [formattedCreatedAt, priorityMeta.label, project?.join_code, t]
     );
-    const taskSectionDescription = "จัดการลำดับและสีกำกับของหัวข้องานอย่างรวดเร็วในมุมมองเดียว";
-    const memberSectionDescription = "ควบคุมสิทธิ์และติดตามสถานะการเข้าร่วมของสมาชิกในโปรเจกต์นี้";
+    const taskSectionDescriptionRaw = t("project.task_section_description");
+    const taskSectionDescription =
+        taskSectionDescriptionRaw && taskSectionDescriptionRaw !== "project.task_section_description"
+            ? taskSectionDescriptionRaw
+            : "จัดการลำดับและสีกำกับของหัวข้องานอย่างรวดเร็วในมุมมองเดียว";
+    const memberSectionDescriptionRaw = t("project.member_section_description");
+    const memberSectionDescription =
+        memberSectionDescriptionRaw && memberSectionDescriptionRaw !== "project.member_section_description"
+            ? memberSectionDescriptionRaw
+            : "ควบคุมสิทธิ์และติดตามสถานะการเข้าร่วมของสมาชิกในโปรเจกต์นี้";
+
+    const memberStatusJoinedRaw = t("project.member_status_joined");
+    const memberStatusJoinedText =
+        memberStatusJoinedRaw && memberStatusJoinedRaw !== "project.member_status_joined"
+            ? memberStatusJoinedRaw
+            : "เข้าร่วมแล้ว";
+    const memberStatusInvitedRaw = t("project.member_status_invited");
+    const memberStatusInvitedText =
+        memberStatusInvitedRaw && memberStatusInvitedRaw !== "project.member_status_invited"
+            ? memberStatusInvitedRaw
+            : "รอเข้าร่วม";
+    const memberStatusJoinedBadgeRaw = t("project.member_status_joined_badge");
+    const memberStatusJoinedBadgeText =
+        memberStatusJoinedBadgeRaw && memberStatusJoinedBadgeRaw !== "project.member_status_joined_badge"
+            ? memberStatusJoinedBadgeRaw
+            : "เข้าร่วมแล้ว";
+    const memberStatusInvitedBadgeRaw = t("project.member_status_invited_badge");
+    const memberStatusInvitedBadgeText =
+        memberStatusInvitedBadgeRaw && memberStatusInvitedBadgeRaw !== "project.member_status_invited_badge"
+            ? memberStatusInvitedBadgeRaw
+            : "รอเข้าร่วม";
 
     const handleMoveTask = useCallback(
         (id: any, direction: -1 | 1) => {
@@ -620,9 +654,12 @@ const ProjectDetailPage = () => {
 
         const newOrder = taskList.length + 1;
         const tempId = `temp-${Date.now()}`;
+        const defaultNameRaw = t("project.untitled_task");
+        const defaultName =
+            defaultNameRaw && defaultNameRaw !== "project.untitled_task" ? defaultNameRaw : "หัวข้องานใหม่";
         const newTask = {
             id: tempId,
-            name: "Untitled",
+            name: defaultName,
             color: "#3B82F6",
             order_index: newOrder,
             is_default: false,
@@ -631,7 +668,7 @@ const ProjectDetailPage = () => {
         };
 
         setTaskList((prev) => [...prev, newTask]);
-    }, [canManageStatuses, isEditMode, taskList.length]);
+    }, [canManageStatuses, isEditMode, t, taskList.length]);
 
     const handleRemoveTask = useCallback((id: any) => {
         if (!isEditMode || !canManageStatuses) return;
@@ -765,14 +802,17 @@ const ProjectDetailPage = () => {
             setDeletedIds([]);
         } catch (error) {
             console.error('Error saving changes:', error);
-            alert('เกิดข้อผิดพลาดในการบันทึกการแก้ไข');
+            await CustomAlert({
+                type: "error",
+                title: t("project.save_status_error"),
+            });
             await fetchTaskStatus();
             setIsEditMode(false);
             setDeletedIds([]);
         } finally {
             setIsSaving(false);
         }
-    }, [canManageStatuses, deletedIds, fetchTaskStatus, isSaving, originalTaskList, taskList]);
+    }, [canManageStatuses, deletedIds, fetchTaskStatus, isSaving, originalTaskList, t, taskList]);
 
     const handleInviteMember = useCallback(async () => {
         if (!canInviteMembers || isInvitingMember || !activeProjectId) return;
@@ -797,7 +837,10 @@ const ProjectDetailPage = () => {
         });
 
         if (existing) {
-            alert("สมาชิกนี้อยู่ในโปรเจกต์แล้ว");
+            await CustomAlert({
+                type: "info",
+                title: t("project.invite_member_existing"),
+            });
             return;
         }
 
@@ -831,20 +874,33 @@ const ProjectDetailPage = () => {
                 });
             }
             setNewMemberUsername("");
+            await CustomAlert({
+                type: "success",
+                title: t("project.invite_member_success"),
+            });
         } catch (error) {
             console.error("invite member error", error);
-            alert("ไม่สามารถเชิญสมาชิกได้");
+            await CustomAlert({
+                type: "error",
+                title: t("project.invite_member_error"),
+            });
         } finally {
             setIsInvitingMember(false);
         }
-    }, [activeProjectId, canInviteMembers, isInvitingMember, newMemberUsername, members]);
+    }, [activeProjectId, canInviteMembers, isInvitingMember, members, newMemberUsername, t]);
 
     const handleRemoveMember = useCallback(
         async (memberId: string) => {
             if (!canRemoveMembers || !activeProjectId) return;
             if (!memberId || memberId === ownerUserId) return;
 
-            if (!window.confirm("ยืนยันการลบสมาชิกคนนี้หรือไม่?")) {
+            const confirm = await CustomAlert({
+                type: "warning",
+                title: t("project.remove_member_confirm_title"),
+                message: t("project.remove_member_confirm_message"),
+            });
+
+            if (!confirm) {
                 return;
             }
 
@@ -861,9 +917,17 @@ const ProjectDetailPage = () => {
                         return memberUserId == null || String(memberUserId) !== memberId;
                     })
                 );
+
+                await CustomAlert({
+                    type: "success",
+                    title: t("project.remove_member_success"),
+                });
             } catch (error) {
                 console.error("remove member error", error);
-                alert("ไม่สามารถลบสมาชิกได้");
+                await CustomAlert({
+                    type: "error",
+                    title: t("project.remove_member_error"),
+                });
             } finally {
                 setRemovingMemberIds((prev) => {
                     const next = { ...prev };
@@ -872,14 +936,13 @@ const ProjectDetailPage = () => {
                 });
             }
         },
-        [activeProjectId, canRemoveMembers, ownerUserId]
+        [activeProjectId, canRemoveMembers, ownerUserId, t]
     );
 
     const handleUpdateProjectStatus = useCallback(
         async (nextStatus: "started" | "cancelled" | "completed") => {
             if (!activeProjectId) return;
 
-            setIsUpdatingProjectStatus(true);
             const statusLabel =
                 nextStatus === "started"
                     ? t("project.status_started")
@@ -887,29 +950,47 @@ const ProjectDetailPage = () => {
                         ? t("project.status_completed")
                         : t("project.status_cancelled");
 
+            const confirmTitle = t("project.status_update_confirm_title");
+            const confirmMessageTemplate = t("project.status_update_confirm_message");
+            const confirmMessage = confirmMessageTemplate.replace("{status}", statusLabel);
+
+            const confirmed = await CustomAlert({
+                type: "confirm",
+                title: confirmTitle,
+                message: confirmMessage,
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            setIsUpdatingProjectStatus(true);
+
             try {
                 await apiPrivate.patch(`/project/${activeProjectId}`, { status: nextStatus });
 
                 setProject((prev: any) =>
                     prev
                         ? {
-                              ...prev,
-                              status: nextStatus,
-                              project_status: nextStatus,
-                          }
+                            ...prev,
+                            status: nextStatus,
+                            project_status: nextStatus,
+                        }
                         : prev
                 );
 
-                if (typeof window !== "undefined") {
-                    const template = t("project.status_update_success");
-                    const message = template.replace("{status}", statusLabel);
-                    alert(message);
-                }
+                const successTemplate = t("project.status_update_success");
+                const successMessage = successTemplate.replace("{status}", statusLabel);
+                await CustomAlert({
+                    type: "success",
+                    title: successMessage,
+                });
             } catch (error) {
                 console.error("update project status error", error);
-                if (typeof window !== "undefined") {
-                    alert(t("project.status_update_error"));
-                }
+                await CustomAlert({
+                    type: "error",
+                    title: t("project.status_update_error"),
+                });
             } finally {
                 setIsUpdatingProjectStatus(false);
             }
@@ -1090,7 +1171,7 @@ const ProjectDetailPage = () => {
                 </div>
             </section>
 
-            <div className="space-y-4 pt-0 lg:-mt-5">
+            <div className="space-y-5 pt-4">
                 <div className={`grid gap-5 ${canManageMembers ? "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]" : ""}`}>
                     <SectionCard className="bg-white/95">
                         <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
@@ -1304,16 +1385,18 @@ const ProjectDetailPage = () => {
                                                                 <span>{member.user_account?.department || "-"}</span>
                                                                 <span className="h-1 w-1 rounded-full bg-gray-400"></span>
                                                                 {member.status === "joined"
-                                                                    ? "เข้าร่วมแล้ว"
+                                                                    ? memberStatusJoinedText
                                                                     : member.status === "invited"
-                                                                        ? "รอเข้าร่วม"
+                                                                        ? memberStatusInvitedText
                                                                         : member.status}
                                                             </p>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <Pill className="border-gray-200 bg-gray-50 text-gray-700">
-                                                            {member.status === "joined" ? "Joined" : "Invited"}
+                                                            {member.status === "joined"
+                                                                ? memberStatusJoinedBadgeText
+                                                                : memberStatusInvitedBadgeText}
                                                         </Pill>
                                                         {canRemoveMembers && !isOwnerMember && (
                                                             <button

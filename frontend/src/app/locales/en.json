@@ -9,6 +9,7 @@
         "email": "Email",
         "fullname": "Fullname",
         "department": "Team",
+        "branch": "Branch",
         "position": "Position",
         "table_no": "#",
         "title": "Employee List",
@@ -59,6 +60,7 @@
         "btn_login": "login"
     },
     "alert": {
+        "are_you_sure": "Are you sure?",
         "error": "Error",
         "alert_error": "The system has an error.",
         "success": "Success!",
@@ -101,6 +103,11 @@
         "detail_project": "Project Details",
         "detail_project_desc": "Explore all the details of your project",
         "join_code": "Join Code",
+        "join_project": "Join Project",
+        "join_with_code_placeholder": "Enter join code",
+        "join_success": "Joined project successfully.",
+        "join_already": "You already joined this project.",
+        "join_error": "Unable to join project.",
         "list_of_employees": "List of employees",
         "my_invitations": "My Invitations",
         "no_invitations": "There are no invitations at this time.",
@@ -111,6 +118,7 @@
         "cancel": "Cancel",
         "add": "Add",
         "edit": "Edit",
+        "delete": "Delete Project",
         "create_new_task_title": "Create a New Task",
         "create_new_task_description": "Define the details of the task you want to create in this project, including its priority and additional information to help the team stay aligned.",
         "create_new_task_note": "You can edit or add more details later in the task card’s detail view.",
@@ -213,10 +221,11 @@
         "typing_connector": "and"
     },
     "table": {
-        "showing_page": "Showing page",
+        "showing_page": "Page",
         "of": "of",
         "previous": "Previous",
-        "next": "Next"
+        "next": "Next",
+        "action": "Actions"
     },
     "main_menu": {
         "head": "Main Menu",
@@ -231,5 +240,33 @@
         "view": "View",
         "save": "Save",
         "cancel": "Cancel"
+    },
+    "settings": {
+        "title": "System Settings",
+        "subtitle": "Manage your profile, security, and general system preferences.",
+        "profile": "Personal Profile",
+        "profile_desc": "Manage your basic information and profile picture.",
+        "security": "Security",
+        "security_desc": "Manage password and authentication.",
+        "preferences": "Preferences",
+        "preferences_desc": "Customize display and language settings.",
+        "language": "Language",
+        "theme": "Theme",
+        "about": "About System",
+        "version": "Version",
+        "save_changes": "Save Changes",
+        "change_password": "Change Password",
+        "current_password": "Current Password",
+        "new_password": "New Password",
+        "confirm_password": "Confirm New Password",
+        "system_config": "System Configuration",
+        "system_config_desc": "Manage system logo and name",
+        "system_name": "System Name",
+        "system_logo": "System Logo",
+        "upload_logo": "Upload Logo",
+        "upload_success": "Upload Successful",
+        "update_success": "Update Successful",
+        "language_th": "Thai",
+        "language_en": "English"
     }
 }

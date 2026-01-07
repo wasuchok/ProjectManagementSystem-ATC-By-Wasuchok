@@ -1,7 +1,8 @@
 "use client";
 
 import ModalInviteJoin from "@/app/components/boards/modal/ModalInviteJoin";
-import { ScrollableTable } from "@/app/components/boards/table/ScrollableTable";
+import { Column, ScrollableTable } from "@/app/components/boards/table/ScrollableTable";
+import { CustomAlert } from "@/app/components/CustomAlertModal";
 import { CustomButton } from "@/app/components/Input/CustomButton";
 import TextField from "@/app/components/Input/TextField";
 import { useLanguage } from "@/app/contexts/LanguageContext";
@@ -11,20 +12,41 @@ import { getSocket } from "@/app/utils/socket";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FiUsers } from "react-icons/fi";
+import { FiUserPlus, FiUsers } from "react-icons/fi";
+
+interface ProjectData {
+    id: number;
+    projectName: string;
+    priority: string;
+    status: string;
+    description: string;
+    join_enabled: boolean;
+    created_at: string;
+    join_code: string;
+    num: number;
+    employees: any[]; // สามารถกำหนด type ละเอียดเพิ่มได้ถ้าทราบ structure ของ member
+    created_by: any;
+    owner_id: any;
+    isOwner: boolean;
+}
 
 const Page = () => {
 
     const router = useRouter()
     const { user } = useUser();
     const { t } = useLanguage();
-    const [data, setData] = useState<any[]>([]);
+    const [data, setData] = useState<ProjectData[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [loading, setLoading] = useState(false);
     const [openModalInviteJoin, setOpenModalInviteJoin] = useState(false)
     const [pendingCount, setPendingCount] = useState(0)
     const [projectInvite, setProjectInvite] = useState([])
+    const [searchInput, setSearchInput] = useState("")
+    const [searchTerm, setSearchTerm] = useState("")
+    const [joinCode, setJoinCode] = useState("")
+    const [joining, setJoining] = useState(false)
+    const [joinPanelOpen, setJoinPanelOpen] = useState(false)
 
     const fetchInviteProjectEmployee = async () => {
         try {
@@ -76,7 +98,7 @@ const Page = () => {
                 limit: 10,
                 status: "",
                 priority: "",
-                search: "",
+                search: searchTerm,
                 created_by: user.id,
             };
 
@@ -126,7 +148,7 @@ const Page = () => {
         }
     };
 
-    const columns: any = [
+    const columns: Column<ProjectData>[] = [
         {
             header: t("project.table_no"), accessor: "num",
         },
@@ -223,12 +245,41 @@ const Page = () => {
         { header: t("project.table_created_at"), accessor: "created_at" },
     ];
 
-    const handleEdit = (row: any) => {
+    const handleEdit = (row: ProjectData) => {
         router.push(`/boards/detail/${row.id}`);
     };
 
-    const handleDelete = (row: any) => {
-        alert(`${t("project.delete")}: ${row.projectName}`);
+    const handleDelete = async (row: ProjectData) => {
+        const isConfirmed = await CustomAlert({
+            type: "warning",
+            title: t("alert.are_you_sure"),
+            message: `${t("project.delete")}: ${row.projectName}`,
+            showCancelButton: true,
+            confirmButtonText: t("actions.delete"),
+            cancelButtonText: t("actions.cancel"),
+        });
+
+        if (isConfirmed) {
+            try {
+                const response = await apiPrivate.delete(`/project/${row.id}`);
+                if (response.status === 200) {
+                    await CustomAlert({
+                        type: "success",
+                        title: t("alert.success"),
+                        message: t("alert.alert_success") || "Deleted successfully.",
+                    });
+                    await fetchAllProjectsByEmployee();
+                    if (user) fetchInviteCountProject();
+                }
+            } catch (error: any) {
+                console.error("❌ Delete project error:", error);
+                await CustomAlert({
+                    type: "error",
+                    title: t("alert.error"),
+                    message: error?.response?.data?.message || t("alert.alert_error"),
+                });
+            }
+        }
     };
 
     useEffect(() => {
@@ -254,7 +305,62 @@ const Page = () => {
 
     useEffect(() => {
         if (user) fetchAllProjectsByEmployee();
-    }, [user, currentPage]);
+    }, [user, currentPage, searchTerm]);
+
+    const handleSearch = () => {
+        setCurrentPage(1);
+        setSearchTerm(searchInput.trim());
+    };
+
+    const handleJoinByCode = async () => {
+        const code = joinCode.trim();
+        if (!code) {
+            await CustomAlert({
+                type: "error",
+                title: t("alert.error"),
+                message: t("project.join_error"),
+            });
+            return;
+        }
+
+        setJoining(true);
+        try {
+            const response = await apiPrivate.post("/project/join-code", { code });
+            const status = response?.data?.data?.status;
+            const apiMessage: string | undefined = response?.data?.message;
+
+            // TODO: Refactor logic checking for "แล้ว" or "already".
+            // This relies on backend returning specific strings which is fragile.
+            // Backend should return a specific status code for "ALREADY_JOINED".
+            const alreadyJoined =
+                status === "joined" &&
+                (apiMessage?.toLowerCase().includes("แล้ว") || apiMessage?.toLowerCase().includes("already"));
+
+            await CustomAlert({
+                type: "success",
+                title: t("alert.success"),
+                message:
+                    alreadyJoined
+                        ? t("project.join_already")
+                        : apiMessage || t("project.join_success"),
+            });
+            setJoinCode("");
+            await fetchAllProjectsByEmployee();
+        } catch (error: any) {
+            console.error("❌ Join project error:", error);
+            const message =
+                error?.response?.data?.message ??
+                t("project.join_error") ??
+                "Unable to join project.";
+            await CustomAlert({
+                type: "error",
+                title: t("alert.error"),
+                message,
+            });
+        } finally {
+            setJoining(false);
+        }
+    };
 
     return (
         <>
@@ -271,7 +377,7 @@ const Page = () => {
                             {t('project.projects_overview_subtitle')}
                         </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:justify-end">
                         <div className="relative">
                             <CustomButton
                                 onClick={fetchInviteProjectEmployee}
@@ -307,10 +413,19 @@ const Page = () => {
                                 className="w-full md:flex-1 rounded-2xl border-slate-200 bg-slate-50/60 px-5 py-3 text-sm text-slate-700 transition focus:border-primary-300 focus:bg-white"
                                 fieldSize="md"
                                 placeholder={`${t("project.search_placeholder")}`}
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleSearch();
+                                    }
+                                }}
                             />
                             <CustomButton
                                 variant="secondary"
                                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600 md:w-auto"
+                                onClick={handleSearch}
                             >
                                 {t('project.btn_search')}
                             </CustomButton>
@@ -338,6 +453,56 @@ const Page = () => {
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                 />
+            </div>
+
+            <div className="fixed bottom-24 right-6 z-40 flex flex-col items-end gap-3">
+                {joinPanelOpen && (
+                    <div className="w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-300/50">
+                        <p className="mb-2 text-sm font-semibold text-slate-800">
+                            {t("project.join_project")}
+                        </p>
+                        <TextField
+                            className="w-full rounded-xl border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 transition focus:border-primary-300 focus:bg-white"
+                            fieldSize="md"
+                            placeholder={`${t("project.join_with_code_placeholder") || "Enter join code"}`}
+                            value={joinCode}
+                            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleJoinByCode();
+                                }
+                            }}
+                        />
+                        <div className="mt-3 flex items-center justify-end gap-2">
+                            <CustomButton
+                                variant="secondary"
+                                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                                onClick={() => setJoinPanelOpen(false)}
+                                disabled={joining}
+                            >
+                                {t("actions.cancel")}
+                            </CustomButton>
+                            <CustomButton
+                                variant="primary"
+                                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600"
+                                onClick={handleJoinByCode}
+                                disabled={joining}
+                            >
+                                {joining ? `${t("project.join_project")}...` : t("project.join_project")}
+                            </CustomButton>
+                        </div>
+                    </div>
+                )}
+                <CustomButton
+                    variant="primary"
+                    className="inline-flex items-center gap-2 rounded-full bg-primary-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-primary-600"
+                    onClick={() => setJoinPanelOpen((prev) => !prev)}
+                    aria-label={joinPanelOpen ? t("actions.cancel") : t("project.join_project")}
+                    icon={<FiUserPlus size={18} />}
+                >
+                    <span className="hidden md:inline">{joinPanelOpen ? t("actions.cancel") : t("project.join_project")}</span>
+                </CustomButton>
             </div>
 
             {openModalInviteJoin && (

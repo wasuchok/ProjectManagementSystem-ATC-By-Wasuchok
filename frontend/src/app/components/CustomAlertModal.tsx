@@ -11,12 +11,15 @@ import {
 } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 
-type AlertType = "info" | "success" | "error" | "confirm" | "loading";
+type AlertType = "info" | "success" | "error" | "confirm" | "loading" | "warning";
 
 interface AlertOptions {
     type?: AlertType;
     title: string;
     message?: string;
+    showCancelButton?: boolean;
+    confirmButtonText?: string;
+    cancelButtonText?: string;
 }
 
 const themeMap: Record<AlertType, { accent: string; icon: ReactNode; header: string }> = {
@@ -40,6 +43,11 @@ const themeMap: Record<AlertType, { accent: string; icon: ReactNode; header: str
         icon: <FaExclamation className="w-6 h-6" />,
         header: "โปรดยืนยัน",
     },
+    warning: {
+        accent: "border-orange-400 bg-orange-50 text-orange-900",
+        icon: <FaExclamation className="w-6 h-6" />,
+        header: "คำเตือน",
+    },
     loading: {
         accent: "border-slate-300 bg-white text-slate-700",
         icon: (
@@ -49,7 +57,14 @@ const themeMap: Record<AlertType, { accent: string; icon: ReactNode; header: str
     },
 };
 
-export function CustomAlert({ type = "info", title, message }: AlertOptions): Promise<boolean> {
+export function CustomAlert({
+    type = "info",
+    title,
+    message,
+    showCancelButton,
+    confirmButtonText,
+    cancelButtonText
+}: AlertOptions): Promise<boolean> {
     return new Promise((resolve) => {
         const container = document.createElement("div");
         document.body.appendChild(container);
@@ -62,7 +77,11 @@ export function CustomAlert({ type = "info", title, message }: AlertOptions): Pr
             resolve(result);
         };
 
-        const currentTheme = themeMap[type];
+        const currentTheme = themeMap[type] ?? themeMap.info;
+
+        if (!themeMap[type]) {
+            console.warn(`[CustomAlert] Warning: Unknown alert type "${type}". Falling back to "info".`);
+        }
 
         root.render(
             <AnimatePresence>
@@ -80,7 +99,7 @@ export function CustomAlert({ type = "info", title, message }: AlertOptions): Pr
                         transition={{ type: "spring", stiffness: 210, damping: 20 }}
                     >
                         <button
-                            onClick={() => handleClose(type === "confirm" ? false : true)}
+                            onClick={() => handleClose(type === "confirm" || type === "warning" || showCancelButton ? false : true)}
                             className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
                             aria-label="Close alert"
                         >
@@ -110,19 +129,19 @@ export function CustomAlert({ type = "info", title, message }: AlertOptions): Pr
                         </div>
                         {type !== "loading" && (
                             <div className="flex flex-col gap-3 px-6 pb-6">
-                                {type === "confirm" ? (
+                                {type === "confirm" || type === "warning" || showCancelButton ? (
                                     <div className="flex flex-wrap gap-3">
                                         <button
                                             onClick={() => handleClose(false)}
                                             className="flex-1 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-none"
                                         >
-                                            ย้อนกลับ
+                                            {cancelButtonText || "ย้อนกลับ"}
                                         </button>
                                         <button
                                             onClick={() => handleClose(true)}
-                                            className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-none"
+                                            className={`flex-1 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-none ${type === "warning" || type === "error" ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-900 hover:bg-slate-800"}`}
                                         >
-                                            ยืนยัน
+                                            {confirmButtonText || "ยืนยัน"}
                                         </button>
                                     </div>
                                 ) : (
@@ -130,7 +149,7 @@ export function CustomAlert({ type = "info", title, message }: AlertOptions): Pr
                                         onClick={() => handleClose(true)}
                                         className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-none"
                                     >
-                                        ปิดข้อความ
+                                        {confirmButtonText || "ปิดข้อความ"}
                                     </button>
                                 )}
                             </div>

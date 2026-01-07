@@ -14,7 +14,7 @@ import MinimalModal from "../../MinimalModal"
 
 const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: any) => {
     const { user }: any = useUser()
-    const { t } = useLanguage();
+    const { t, lang } = useLanguage();
     const {
         control,
         handleSubmit,
@@ -110,11 +110,31 @@ const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: a
         }
     }
 
+    const titleLabel = lang === "TH" ? "หัวข้องาน" : t("project.title")
+    const titlePlaceholder =
+        lang === "TH"
+            ? "เช่น ปรับดีไซน์หน้าแดชบอร์ด, ออกแบบใบเสนอราคาใหม่"
+            : t("please_fill_in_information")
+    const descriptionPlaceholder =
+        lang === "TH"
+            ? "สรุปขอบเขต เป้าหมาย และรายละเอียดงานให้ทีมเข้าใจตรงกัน"
+            : t("please_fill_in_information")
+    const submitLabel = isSubmitting
+        ? lang === "TH"
+            ? "กำลังสร้าง..."
+            : "Creating..."
+        : lang === "TH"
+            ? "สร้างงาน"
+            : "Create task"
+
     return (
         <>
             <MinimalModal
                 isOpen={open}
-                onClose={() => setOpen(false)}
+                onClose={() => {
+                    setOpen(false)
+                    setActiveTab('form')
+                }}
                 title={t('project.create_new_task_title')}
             >
                 <div className="mb-4 inline-flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-sm text-xs font-semibold">
@@ -159,8 +179,8 @@ const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: a
                                     render={({ field }) => (
                                         <TextField
                                             required
-                                            label={t('project.title')}
-                                            placeholder={t("please_fill_in_information")}
+                                            label={titleLabel}
+                                            placeholder={titlePlaceholder}
                                             error={errors.title?.message}
                                             {...field}
                                             className="w-full"
@@ -178,7 +198,7 @@ const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: a
                                         <TextArea
                                             required
                                             label={t('project.description')}
-                                            placeholder={t("please_fill_in_information")}
+                                            placeholder={descriptionPlaceholder}
                                             error={errors.description?.message}
                                             {...field}
                                             className="w-full"
@@ -199,6 +219,7 @@ const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: a
                                 onClick={() => {
                                     reset()
                                     setOpen(false)
+                                    setActiveTab('form')
                                 }}
                                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
                             >
@@ -209,7 +230,7 @@ const ModalAddTask = ({ open, setOpen, project_id, boards, fetchTaskProject }: a
                                 disabled={isSubmitting}
                                 className="inline-flex items-center gap-2 rounded-full border border-primary-500 bg-primary-500 px-5 py-2 text-sm font-semibold text-white transition hover:border-primary-600 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:cursor-not-allowed disabled:opacity-70"
                             >
-                                {isSubmitting ? "กำลังสร้าง..." : "สร้าง Task"}
+                                {submitLabel}
                             </button>
                         </div>
                     </form>

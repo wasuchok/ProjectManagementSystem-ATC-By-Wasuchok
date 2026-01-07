@@ -8,7 +8,7 @@ type LangType = "EN" | "TH";
 
 interface LangContextType {
     lang: LangType;
-    t: (key: string) => string;
+    t: (key: string, vars?: Record<string, string | number>) => string;
     setLang: (lang: LangType) => void;
 }
 
@@ -35,9 +35,16 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
     };
 
 
-    const t = (key: string) => {
+    const t = (key: string, vars?: Record<string, string | number>) => {
         const parts = key.split(".");
-        return parts.reduce((obj: any, k: string) => (obj ? obj[k] : key), dict) || key;
+        const raw = parts.reduce((obj: any, k: string) => (obj != null ? obj[k] : undefined), dict);
+        if (typeof raw !== "string") return key;
+
+        if (!vars) return raw;
+        return raw.replace(/\{(\w+)\}/g, (match, token) => {
+            const replacement = vars[token];
+            return replacement !== undefined ? String(replacement) : match;
+        });
     };
 
     return (
