@@ -249,6 +249,17 @@ export default function KanbanBoard() {
         [isProjectOwner, isProjectMember, isReadOnlyStatus]
     );
     const socketRef = useRef<Socket | null>(null);
+    const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const [cursors, setCursors] = useState<Record<string, { xr: number; yr: number; ts: number }>>({});
+    const cursorEntries = useMemo(() => {
+        return Object.entries(cursors).map(([uid, pos]) => {
+            const match = projectMembers.find((m) => String(m.userId) === String(uid)) ?? null;
+            const name = match?.fullName ?? uid;
+            const avatar = match?.avatarUrl ? getImageUrl(match.avatarUrl) : null;
+            return { uid, name, avatar, xr: pos.xr, yr: pos.yr, ts: pos.ts };
+        });
+    }, [cursors, projectMembers]);
     const draftRedirectRef = useRef(false);
     const statusOptions = useMemo(
         () =>
@@ -1465,6 +1476,15 @@ export default function KanbanBoard() {
             setOnlineUsers(users);
             setOnlineCount(Number.isFinite(count) ? count : users.length);
         });
+        socket.on("project:cursor:update", (payload: any) => {
+            if (!payload) return;
+            if (Number(payload.projectId) !== Number(projectId)) return;
+            const uid = String(payload.userId ?? "");
+            if (!uid || uid === String(user?.id ?? "")) return;
+            const xr = Math.max(0, Math.min(1, Number(payload.xRatio ?? payload.xr ?? 0)));
+            const yr = Math.max(0, Math.min(1, Number(payload.yRatio ?? payload.yr ?? 0)));
+            setCursors((prev) => ({ ...prev, [uid]: { xr, yr, ts: Date.now() } }));
+        });
         socket.on("project:task:progress:updated", (payload: any) => {
             if (!payload) return;
             if (Number(payload.projectId) !== Number(projectId)) return;
@@ -1505,6 +1525,29 @@ export default function KanbanBoard() {
             socket.off("project:task:progress:updated");
         };
     }, [projectId, accessChecked, accessDenied, normalizeTaskData, updateBoardsWithTask]);
+
+
+    useEffect(() => {
+        if (!projectId || !accessChecked || accessDenied) return;
+        const el = scrollAreaRef.current ?? containerRef.current;
+        const socket = socketRef.current;
+        if (!el || !socket) return;
+        let last = 0;
+        const emitMove = (ev: MouseEvent) => {
+            const now = Date.now();
+            if (now - last < 50) return;
+            last = now;
+            const rect = el.getBoundingClientRect();
+            const xr = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+            const yr = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+            socket.emit("project:cursor:update", { projectId, xRatio: xr, yRatio: yr });
+        };
+        el.addEventListener("mousemove", emitMove);
+        return () => {
+            el.removeEventListener("mousemove", emitMove);
+        };
+    }, [projectId, accessChecked, accessDenied]);
+
 
     useEffect(() => {
         if (activeTab === "logs" || activeTab === "timeline" || activeTab === "gantt") {
@@ -1594,6 +1637,7 @@ export default function KanbanBoard() {
         const { source, destination } = result;
         if (!destination) return;
         if (!canManageTasks) return;
+
 
         if (source.droppableId === destination.droppableId && source.index === destination.index) {
             return;
@@ -1723,7 +1767,39 @@ export default function KanbanBoard() {
                     pointer-events: none;
                 }
             `}</style>
-            <div className="relative min-h-[82vh] rounded-3xl border border-slate-100 bg-slate-50/80 p-6">
+            <div ref={containerRef} className="relative min-h-[82vh] rounded-3xl border border-slate-100 bg-slate-50/80 p-6">
+                <div className="pointer-events-none absolute inset-0 z-50">
+                    {cursorEntries.map((c) => (
+                        <div
+                            key={c.uid}
+                            className="absolute"
+                            style={{ left: `${c.xr * 100}%`, top: `${c.yr * 100}%` }}
+                        >
+                            <div className="translate-x-2 translate-y-2">
+                                <div className="flex items-center gap-1">
+                                    <div className="relative">
+                                        {c.avatar ? (
+                                            <img
+                                                src={c.avatar}
+                                                alt={c.name}
+                                                className="h-5 w-5 rounded-full border border-white shadow-sm"
+                                            />
+                                        ) : (
+                                            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-white bg-slate-200 text-[9px] font-semibold text-slate-700 shadow-sm">
+                                                {c.name?.charAt(0)?.toUpperCase() ?? "U"}
+                                            </div>
+                                        )}
+                                        <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                                        <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                                    </div>
+                                    <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 shadow-sm">
+                                        {c.name}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
                 {isDraftStatus && isProjectOwner && (
                     <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 shadow-sm">
                         {t("project.status_draft_owner_hint")}
@@ -1785,51 +1861,53 @@ export default function KanbanBoard() {
                             </div>
                         )}
                     </div>
-                    {isProjectOwner && (
-                        <div className="flex flex-wrap items-center gap-2">
-                            {isDraftStatus && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleUpdateProjectStatus("started")}
-                                    disabled={isUpdatingProjectStatus}
-                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
-                                >
-                                    <FiPlay size={14} />
-                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_start_work")}
-                                </button>
-                            )}
-                            {!isDraftStatus && !isReadOnlyStatus && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleUpdateProjectStatus("completed")}
-                                    disabled={isUpdatingProjectStatus}
-                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
-                                >
-                                    <FiCheck size={14} />
-                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_complete_project")}
-                                </button>
-                            )}
-                            {!isDraftStatus && !isCancelledStatus && !isCompletedStatus && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleUpdateProjectStatus("cancelled")}
-                                    disabled={isUpdatingProjectStatus}
-                                    className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-400"
-                                >
-                                    <FiX size={14} />
-                                    {isUpdatingProjectStatus ? t("project.saving") : t("project.action_cancel_project")}
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={handleOpenProjectChat}
-                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600"
-                            >
-                                <FiMessageCircle size={14} />
-                                {t("project.comments")}
-                            </button>
-                        </div>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={handleOpenProjectChat}
+                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600"
+                        >
+                            <FiMessageCircle size={14} />
+                            {t("project.comments")}
+                        </button>
+                        {isProjectOwner && (
+                            <>
+                                {isDraftStatus && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleUpdateProjectStatus("started")}
+                                        disabled={isUpdatingProjectStatus}
+                                        className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                                    >
+                                        <FiPlay size={14} />
+                                        {isUpdatingProjectStatus ? t("project.saving") : t("project.action_start_work")}
+                                    </button>
+                                )}
+                                {!isDraftStatus && !isReadOnlyStatus && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleUpdateProjectStatus("completed")}
+                                        disabled={isUpdatingProjectStatus}
+                                        className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                                    >
+                                        <FiCheck size={14} />
+                                        {isUpdatingProjectStatus ? t("project.saving") : t("project.action_complete_project")}
+                                    </button>
+                                )}
+                                {!isDraftStatus && !isCancelledStatus && !isCompletedStatus && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleUpdateProjectStatus("cancelled")}
+                                        disabled={isUpdatingProjectStatus}
+                                        className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-400"
+                                    >
+                                        <FiX size={14} />
+                                        {isUpdatingProjectStatus ? t("project.saving") : t("project.action_cancel_project")}
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </div>
 
                 </div>
                 {activeTab === "board" && (
@@ -1843,6 +1921,7 @@ export default function KanbanBoard() {
                         priorityConfig={priorityConfig}
                         getProgressValue={getProgressValue}
                         getProgressAppearance={getProgressAppearance}
+                        onScrollAreaRef={(el) => { scrollAreaRef.current = el; }}
                     />
                 )}
 

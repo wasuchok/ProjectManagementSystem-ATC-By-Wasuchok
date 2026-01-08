@@ -231,6 +231,8 @@
         "head": "Main Menu",
         "home": "Home",
         "boards": "Boards",
+        "notifications": "Notifications",
+        "calendar": "Calendar",
         "employees": "Employees",
         "setting": "Setting"
     },

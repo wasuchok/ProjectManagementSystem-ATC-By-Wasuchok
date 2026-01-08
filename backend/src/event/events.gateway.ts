@@ -110,6 +110,27 @@ export class EventsGateway {
     }
   }
 
+  @SubscribeMessage('project:cursor:update')
+  handleCursorUpdate(
+    @MessageBody()
+    payload: { projectId: string | number; xRatio: number; yRatio: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!payload?.projectId) return;
+    const room = this.projectRoom(payload.projectId);
+    const userId = this.socketToUser.get(client.id);
+    if (!userId) return;
+    const xRatio = Math.max(0, Math.min(1, Number(payload.xRatio ?? 0)));
+    const yRatio = Math.max(0, Math.min(1, Number(payload.yRatio ?? 0)));
+    client.to(room).emit('project:cursor:update', {
+      projectId: payload.projectId,
+      userId,
+      xRatio,
+      yRatio,
+    });
+  }
+
+
   @SubscribeMessage('joinTask')
   handleJoinTask(
     @MessageBody()

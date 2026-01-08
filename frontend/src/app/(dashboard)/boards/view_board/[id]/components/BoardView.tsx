@@ -39,6 +39,7 @@ interface BoardViewProps {
     priorityConfig: any;
     getProgressValue: (val: any) => number;
     getProgressAppearance: (val: number) => { gradient: string; glowColor: string };
+    onScrollAreaRef?: (el: HTMLDivElement | null) => void;
 }
 
 export default function BoardView({
@@ -51,10 +52,11 @@ export default function BoardView({
     priorityConfig,
     getProgressValue,
     getProgressAppearance,
+    onScrollAreaRef,
 }: BoardViewProps) {
     return (
         <DragDropContext onDragEnd={handleDragEnd}>
-            <div className="flex gap-6 overflow-x-auto pb-4">
+            <div className="flex gap-6 overflow-x-auto pb-4" ref={onScrollAreaRef}>
                 {boards.map((board) => {
                     const tasks = board.tasks ?? [];
 
