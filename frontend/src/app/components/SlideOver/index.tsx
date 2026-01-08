@@ -72,7 +72,7 @@ const SlideOver: React.FC<SlideOverProps> = ({
         <AnimatePresence>
             {isOpen && (
                 <motion.div
-                    className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"
+                    className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-sm"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -122,4 +122,3 @@ const SlideOver: React.FC<SlideOverProps> = ({
 };
 
 export default SlideOver;
-

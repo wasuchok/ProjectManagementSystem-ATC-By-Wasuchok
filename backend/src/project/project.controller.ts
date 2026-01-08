@@ -183,6 +183,38 @@ export class ProjectController {
     );
   }
 
+  @Get('/:project_id/comments')
+  @Roles('admin', 'staff', 'employee')
+  async getProjectComments(@Param('project_id') project_id: string) {
+    return this.projectService.getProjectComments(Number(project_id));
+  }
+
+  @Post('/:project_id/comments')
+  @Roles('admin', 'staff', 'employee')
+  async createProjectComment(
+    @Param('project_id') project_id: string,
+    @Body('message') message: string,
+    @Req() req: Request,
+  ) {
+    const authUser: any = (req as any).user;
+    const userId =
+      typeof authUser?.sub === 'string'
+        ? authUser.sub
+        : authUser?.sub != null
+          ? String(authUser.sub)
+          : '';
+
+    if (!userId) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 401, null);
+    }
+
+    return this.projectService.createProjectComment(
+      Number(project_id),
+      userId,
+      message,
+    );
+  }
+
   @Get('/members/:project_id')
   @Roles('admin', 'staff', 'employee')
   async getProjectMembers(@Param('project_id') project_id: string) {

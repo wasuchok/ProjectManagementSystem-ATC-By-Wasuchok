@@ -2,17 +2,19 @@
 
 import ModalAddTask from "@/app/components/boards/modal/ModalAddTask";
 import ModalDetailTask from "@/app/components/boards/modal/ModalDetailTask";
+import SlideOver from "@/app/components/SlideOver";
 import { useLanguage } from "@/app/contexts/LanguageContext";
 import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { decodeSingleHashid } from "@/app/utils/hashids";
+import { getImageUrl } from "@/app/utils/imagePath";
 import { getSocket } from "@/app/utils/socket";
 import {
     DropResult
 } from "@hello-pangea/dnd";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiCheck, FiPlay, FiX } from "react-icons/fi";
+import { FiCheck, FiMessageCircle, FiPlay, FiX } from "react-icons/fi";
 import type { Socket } from "socket.io-client";
 import BoardView from "./components/BoardView";
 import GanttView from "./components/GanttView";
@@ -71,6 +73,73 @@ type ProjectMember = {
     fullName?: string;
     department?: string;
     avatarUrl?: string;
+    status?: string;
+};
+
+type ProjectComment = {
+    id: string;
+    projectId?: string;
+    userId: string;
+    message: string;
+    createdAt?: string;
+    updatedAt?: string;
+    authorName?: string;
+    authorRole?: string;
+};
+
+const normalizeProjectComment = (comment: any): ProjectComment => ({
+    id: String(comment.id),
+    projectId:
+        comment.projectId != null
+            ? String(comment.projectId)
+            : comment.project_id != null
+                ? String(comment.project_id)
+                : undefined,
+    userId: comment.userId ?? comment.user_id ?? "",
+    message: comment.message ?? "",
+    createdAt: comment.createdAt ?? comment.created_at ?? undefined,
+    updatedAt: comment.updatedAt ?? comment.updated_at ?? undefined,
+    authorName: comment.authorName,
+    authorRole: comment.authorRole ?? comment.authorDepartment,
+});
+
+const sortProjectComments = (items: ProjectComment[]) => {
+    const getTime = (value?: string) => {
+        if (!value) return Number.NaN;
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? Number.NaN : parsed;
+    };
+    return items
+        .slice()
+        .sort((a, b) => {
+            const aTime = getTime(a.createdAt);
+            const bTime = getTime(b.createdAt);
+            if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+            if (Number.isNaN(aTime)) return 1;
+            if (Number.isNaN(bTime)) return -1;
+            return aTime - bTime;
+        });
+};
+
+const mergeUniqueProjectComments = (
+    existing: ProjectComment[],
+    incoming: ProjectComment[]
+) => {
+    const map = new Map<string, ProjectComment>();
+    existing.forEach((comment) => {
+        map.set(comment.id, comment);
+    });
+    incoming.forEach((comment) => {
+        map.set(comment.id, comment);
+    });
+    return sortProjectComments(Array.from(map.values()));
+};
+
+const formatProjectCommentDateTime = (value?: string) => {
+    if (!value) return "";
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) return "";
+    return new Date(parsed).toLocaleString("th-TH");
 };
 
 type TaskMovedEvent = {
@@ -126,6 +195,24 @@ export default function KanbanBoard() {
     const [accessChecked, setAccessChecked] = useState(false);
     const [accessDenied, setAccessDenied] = useState(false);
     const [isUpdatingProjectStatus, setIsUpdatingProjectStatus] = useState(false);
+    const [onlineCount, setOnlineCount] = useState<number>(0);
+    const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+    const onlineMembers = useMemo(() => {
+        const toDisplay = (m?: ProjectMember | null) => {
+            const name = m?.fullName ?? undefined;
+            const avatar = m?.avatarUrl ? getImageUrl(m.avatarUrl) : null;
+            return { name, avatar };
+        };
+        return onlineUsers.map((uid) => {
+            const match = projectMembers.find((m) => String(m.userId) === String(uid)) ?? null;
+            const disp = toDisplay(match);
+            return {
+                userId: String(uid),
+                name: disp.name ?? String(uid),
+                avatar: disp.avatar,
+            };
+        });
+    }, [onlineUsers, projectMembers]);
 
     const workloadMax = useMemo(() => {
         let maxActive = 1;
@@ -152,9 +239,14 @@ export default function KanbanBoard() {
         () => isCancelledStatus || isCompletedStatus,
         [isCancelledStatus, isCompletedStatus]
     );
+    const isProjectMember = useMemo(() => {
+        const uid = user?.id != null ? String(user.id) : null;
+        if (!uid) return false;
+        return projectMembers.some((m) => String(m.userId) === uid);
+    }, [projectMembers, user?.id]);
     const canManageTasks = useMemo(
-        () => isProjectOwner && !isReadOnlyStatus,
-        [isProjectOwner, isReadOnlyStatus]
+        () => (isProjectOwner || isProjectMember) && !isReadOnlyStatus,
+        [isProjectOwner, isProjectMember, isReadOnlyStatus]
     );
     const socketRef = useRef<Socket | null>(null);
     const draftRedirectRef = useRef(false);
@@ -643,6 +735,7 @@ export default function KanbanBoard() {
                             fullName: member.user_account?.full_name ?? undefined,
                             department: member.user_account?.department ?? undefined,
                             avatarUrl: member.user_account?.image ?? undefined,
+                            status: member.status ?? undefined,
                         }))
                         .filter((member: ProjectMember) => member.userId)
                     : [];
@@ -1293,6 +1386,13 @@ export default function KanbanBoard() {
         return legend;
     }, [ganttItems]);
 
+    const [isProjectChatOpen, setIsProjectChatOpen] = useState(false);
+    const [projectComments, setProjectComments] = useState<ProjectComment[]>([]);
+    const [isLoadingProjectComments, setIsLoadingProjectComments] = useState(false);
+    const [projectCommentError, setProjectCommentError] = useState<string | null>(null);
+    const [newProjectCommentMessage, setNewProjectCommentMessage] = useState("");
+    const [isSubmittingProjectComment, setIsSubmittingProjectComment] = useState(false);
+
     const ganttGroups = useMemo(() => {
         const byTask = new Map<string, { taskId: string; taskTitle: string; items: typeof ganttItems }>();
         ganttItems.forEach((it) => {
@@ -1338,14 +1438,71 @@ export default function KanbanBoard() {
             updateBoardsWithTask(normalizedTask, previousStatusId);
         };
 
+        const handleProjectCommentCreated = (payload: any) => {
+            if (!payload) return;
+            const payloadProjectId =
+                payload.projectId ??
+                payload.comment?.projectId ??
+                payload.comment?.project_id;
+            if (!projectId || payloadProjectId == null || Number(payloadProjectId) !== Number(projectId)) {
+                return;
+            }
+            const normalized = normalizeProjectComment(payload.comment ?? payload);
+            setProjectComments((prev) =>
+                mergeUniqueProjectComments(prev, [normalized])
+            );
+        };
+
         socket.emit("joinProject", projectId);
         socket.on("project:task:created", handleTaskCreated);
         socket.on("project:task:moved", handleTaskMoved);
+        socket.on("project:comment:created", handleProjectCommentCreated);
+        socket.on("project:presence:update", (payload: any) => {
+            if (!payload) return;
+            if (Number(payload.projectId) !== Number(projectId)) return;
+            const users = Array.isArray(payload.users) ? payload.users.map((x: any) => String(x)) : [];
+            const count = Number(payload.count ?? users.length ?? 0);
+            setOnlineUsers(users);
+            setOnlineCount(Number.isFinite(count) ? count : users.length);
+        });
+        socket.on("project:task:progress:updated", (payload: any) => {
+            if (!payload) return;
+            if (Number(payload.projectId) !== Number(projectId)) return;
+            const taskId = String(payload.taskId ?? payload.task?.id ?? "");
+            const progress = payload.progressPercent ?? payload.task?.progress_percent ?? null;
+            const statusId =
+                payload.statusId != null
+                    ? String(payload.statusId)
+                    : payload.task?.status_id != null
+                        ? String(payload.task.status_id)
+                        : null;
+            setBoards((prevBoards) =>
+                prevBoards.map((board) => {
+                    const updatedTasks = board.tasks.map((t) =>
+                        t.id === taskId
+                            ? {
+                                ...t,
+                                progressPercent:
+                                    progress != null
+                                        ? String(progress)
+                                        : t.progressPercent,
+                                statusId: statusId ?? t.statusId,
+                                statusLabel: statusId && board.id === statusId ? board.title : t.statusLabel,
+                            }
+                            : t
+                    );
+                    return { ...board, tasks: updatedTasks };
+                })
+            );
+        });
 
         return () => {
             socket.emit("leaveProject", projectId);
             socket.off("project:task:created", handleTaskCreated);
             socket.off("project:task:moved", handleTaskMoved);
+            socket.off("project:comment:created", handleProjectCommentCreated);
+            socket.off("project:presence:update");
+            socket.off("project:task:progress:updated");
         };
     }, [projectId, accessChecked, accessDenied, normalizeTaskData, updateBoardsWithTask]);
 
@@ -1363,6 +1520,74 @@ export default function KanbanBoard() {
             setOpenModalIsDefault(false);
         }
     }, [canManageTasks]);
+
+    const fetchProjectComments = useCallback(async () => {
+        if (!projectId) {
+            setProjectComments([]);
+            return;
+        }
+        setIsLoadingProjectComments(true);
+        setProjectCommentError(null);
+        try {
+            const response = await apiPrivate.get(`/project/${projectId}/comments`);
+            const payload = response?.data?.data ?? response?.data ?? [];
+            const normalized = Array.isArray(payload)
+                ? payload.map((item: any) => normalizeProjectComment(item))
+                : payload
+                    ? [normalizeProjectComment(payload)]
+                    : [];
+            setProjectComments(mergeUniqueProjectComments([], normalized));
+        } catch (error) {
+            setProjectCommentError(
+                t("project.failed_to_load_comments") || "ไม่สามารถโหลดความคิดเห็นได้"
+            );
+        } finally {
+            setIsLoadingProjectComments(false);
+        }
+    }, [projectId, t]);
+
+    const handleOpenProjectChat = () => {
+        setIsProjectChatOpen(true);
+        fetchProjectComments();
+    };
+
+    const handleCloseProjectChat = () => {
+        setIsProjectChatOpen(false);
+    };
+
+    const handleSubmitProjectComment = async () => {
+        if (!projectId) return;
+        const trimmed = newProjectCommentMessage.trim();
+        if (!trimmed) return;
+        setIsSubmittingProjectComment(true);
+        setProjectCommentError(null);
+        try {
+            const response = await apiPrivate.post(`/project/${projectId}/comments`, {
+                message: trimmed,
+            });
+            const payload = response?.data?.data ?? response?.data;
+            if (Array.isArray(payload)) {
+                const normalized = payload.map((item: any) =>
+                    normalizeProjectComment(item)
+                );
+                setProjectComments((prev) =>
+                    mergeUniqueProjectComments(prev, normalized)
+                );
+            } else if (payload) {
+                const normalized = normalizeProjectComment(payload);
+                setProjectComments((prev) =>
+                    mergeUniqueProjectComments(prev, [normalized])
+                );
+            }
+            setNewProjectCommentMessage("");
+        } catch (error) {
+            setProjectCommentError(
+                t("project.failed_to_send_comment") || "ไม่สามารถส่งความคิดเห็นได้"
+            );
+        } finally {
+            setIsSubmittingProjectComment(false);
+        }
+    };
 
 
     const handleDragEnd = async (result: DropResult) => {
@@ -1525,6 +1750,41 @@ export default function KanbanBoard() {
                             </button>
                         ))}
                     </div>
+                    <div className="flex items-center gap-3">
+                        <div className="text-xs font-semibold text-slate-500">
+                            กำลังดูอยู่ {onlineCount} คน
+                        </div>
+                        {onlineMembers.length > 0 && (
+                            <div className="flex items-center -space-x-2">
+                                {onlineMembers.slice(0, 5).map((u) => (
+                                    <div key={u.userId} className="relative flex items-center">
+                                        {u.avatar ? (
+                                            <img
+                                                src={u.avatar}
+                                                alt={u.name}
+                                                title={u.name}
+                                                className="h-6 w-6 rounded-full border border-white shadow-sm"
+                                            />
+                                        ) : (
+                                            <div
+                                                title={u.name}
+                                                className="flex h-6 w-6 items-center justify-center rounded-full border border-white bg-slate-200 text-[10px] font-semibold text-slate-700 shadow-sm"
+                                            >
+                                                {u.name?.charAt(0)?.toUpperCase() ?? "U"}
+                                            </div>
+                                        )}
+                                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+                                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                                    </div>
+                                ))}
+                                {onlineMembers.length > 5 && (
+                                    <div className="ml-2 text-[10px] font-semibold text-slate-500">
+                                        +{onlineMembers.length - 5}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                     {isProjectOwner && (
                         <div className="flex flex-wrap items-center gap-2">
                             {isDraftStatus && (
@@ -1560,6 +1820,14 @@ export default function KanbanBoard() {
                                     {isUpdatingProjectStatus ? t("project.saving") : t("project.action_cancel_project")}
                                 </button>
                             )}
+                            <button
+                                type="button"
+                                onClick={handleOpenProjectChat}
+                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-600"
+                            >
+                                <FiMessageCircle size={14} />
+                                {t("project.comments")}
+                            </button>
                         </div>
                     )}
 
@@ -1670,6 +1938,124 @@ export default function KanbanBoard() {
                 {openModalIsDefault && (
                     <ModalAddTask fetchTaskProject={fetchTaskProject} open={openModalIsDefault} setOpen={setOpenModalIsDefault} project_id={projectId ?? undefined} boards={boards} />
                 )}
+                <SlideOver
+                    isOpen={isProjectChatOpen}
+                    onClose={handleCloseProjectChat}
+                    title={t("project.comments")}
+                >
+                    <div className="flex h-full flex-col gap-4">
+                        <div className="flex flex-col gap-1">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                {t("project.comments")}
+                            </p>
+                        </div>
+                        <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+                            {isLoadingProjectComments ? (
+                                <p className="text-xs text-slate-500">
+                                    {t("project.loading_comments")}
+                                </p>
+                            ) : projectCommentError ? (
+                                <p className="text-xs font-semibold text-rose-500">
+                                    {projectCommentError}
+                                </p>
+                            ) : projectComments.length === 0 ? (
+                                <p className="text-xs text-slate-500">
+                                    {t("project.no_comments")}
+                                </p>
+                            ) : (
+                                projectComments.map((comment) => {
+                                    const author =
+                                        comment.authorName ?? comment.userId;
+                                    const displayTime = comment.createdAt
+                                        ? formatProjectCommentDateTime(comment.createdAt)
+                                        : undefined;
+                                    const initials = (() => {
+                                        if (!author) return "?";
+                                        const parts = author
+                                            .trim()
+                                            .split(/\s+/)
+                                            .filter(Boolean);
+                                        if (parts.length === 0) return "?";
+                                        if (parts.length === 1) {
+                                            return parts[0]
+                                                .slice(0, 2)
+                                                .toUpperCase();
+                                        }
+                                        return (
+                                            parts[0].charAt(0) +
+                                            parts[1].charAt(0)
+                                        ).toUpperCase();
+                                    })();
+                                    return (
+                                        <div
+                                            key={comment.id}
+                                            className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3"
+                                        >
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-600">
+                                                {initials}
+                                            </div>
+                                            <div className="flex-1 space-y-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <p className="text-sm font-semibold text-slate-700">
+                                                        {author}
+                                                    </p>
+                                                    {comment.authorRole && (
+                                                        <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-600">
+                                                            {comment.authorRole}
+                                                        </span>
+                                                    )}
+                                                    {displayTime && (
+                                                        <span className="text-[11px] text-slate-400">
+                                                            {displayTime}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-slate-700">
+                                                    {comment.message}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                        <div className="space-y-2 border-t border-slate-200 pt-3">
+                            <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                {t("project.add_comment")}
+                            </label>
+                            <textarea
+                                rows={3}
+                                value={newProjectCommentMessage}
+                                onChange={(e) =>
+                                    setNewProjectCommentMessage(e.target.value)
+                                }
+                                placeholder={t("project.comment_placeholder")}
+                                className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                                disabled={isSubmittingProjectComment}
+                            />
+                            {projectCommentError && (
+                                <p className="text-xs font-semibold text-rose-500">
+                                    {projectCommentError}
+                                </p>
+                            )}
+                            <div className="flex items-center justify-end">
+                                <button
+                                    type="button"
+                                    onClick={handleSubmitProjectComment}
+                                    disabled={
+                                        isSubmittingProjectComment ||
+                                        !newProjectCommentMessage.trim()
+                                    }
+                                    className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {isSubmittingProjectComment
+                                        ? t("project.comment_submitting")
+                                        : t("project.comment_submit")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </SlideOver>
             </div>
         </>
     );

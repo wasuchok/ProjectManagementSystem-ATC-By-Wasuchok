@@ -1,6 +1,6 @@
 
-import { io, Socket } from "socket.io-client";
 import { CONFIG } from "@/app/config";
+import { io, Socket } from "socket.io-client";
 
 const SOCKET_URL = CONFIG.socketUrl;
 
@@ -9,8 +9,14 @@ let socket: Socket | null = null;
 export const getSocket = (): Socket => {
     if (!socket) {
         socket = io(SOCKET_URL, {
-            transports: ["websocket"],
-            autoConnect: false,
+            transports: ["websocket", "polling"],
+            autoConnect: true,
+            withCredentials: true,
+            path: "/socket.io",
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            timeout: 20000,
         });
 
         socket.on("connect", () => {
@@ -19,6 +25,9 @@ export const getSocket = (): Socket => {
 
         socket.on("disconnect", () => {
             console.log("❌ Disconnected");
+        });
+        socket.on("connect_error", (err) => {
+            console.error("⚠️ Socket connect_error:", err?.message ?? err);
         });
     }
 

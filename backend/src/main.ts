@@ -16,7 +16,13 @@ async function bootstrap() {
   });
 
   app.enableCors({
-    origin: ['http://10.17.3.244:6565', 'http://localhost:6565'],
+    origin: [
+      'http://10.17.3.244:6565',
+      'http://localhost:6565',
+      'http://127.0.0.1:6565',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ],
     credentials: true,
   });
 
@@ -34,7 +40,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
   console.log(`Server running on http://localhost:${port}`);
 }
 bootstrap();

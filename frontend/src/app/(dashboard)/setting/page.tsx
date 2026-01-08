@@ -273,8 +273,8 @@ const SettingPage = () => {
                     </div>
 
                     <div className="flex justify-end gap-2">
-                        <CustomButton variant="outline" onClick={() => setCropOpen(false)}>
-                            {t("cancel") ?? "ยกเลิก"}
+                        <CustomButton variant="secondary" onClick={() => setCropOpen(false)}>
+                        {t("cancel") ?? "ยกเลิก"}
                         </CustomButton>
                         <CustomButton variant="primary" onClick={confirmCrop}>
                             {t("settings.save_changes")}

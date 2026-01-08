@@ -9,6 +9,7 @@ import { PrismaService } from './prisma.service';
 import { ProjectModule } from './project/project.module';
 import { SettingModule } from './setting/setting.module';
 import { UserAccountModule } from './user_account/user_account.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { UserAccountModule } from './user_account/user_account.module';
     UserAccountModule,
     ProjectModule,
     SettingModule,
-    EventsModule
+    EventsModule,
+    NotificationsModule
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

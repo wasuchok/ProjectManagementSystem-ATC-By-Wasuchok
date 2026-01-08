@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FaClipboardList, FaHome, FaSlidersH, FaUsers } from "react-icons/fa";
+import { FaBell, FaCalendar, FaClipboardList, FaHome, FaSlidersH, FaUsers } from "react-icons/fa";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useUser } from "../contexts/UserContext";
 import { apiPrivate } from "../services/apiPrivate";
 import { getImageUrl } from "../utils/imagePath";
+import { getSocket } from "../utils/socket";
 
 const Sidebar = ({ isOpen }: any) => {
     const pathname = usePathname();
     const { t } = useLanguage();
     const { user } = useUser();
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [unreadCount, setUnreadCount] = useState<number>(0);
 
     useEffect(() => {
         const loadLogo = async () => {
@@ -29,6 +31,26 @@ const Sidebar = ({ isOpen }: any) => {
             }
         };
         loadLogo();
+    }, []);
+
+    useEffect(() => {
+        // Fetch initial count
+        apiPrivate.get('/notifications/unread-count')
+            .then(res => {
+                setUnreadCount(res.data.count);
+            })
+            .catch(err => console.error("Failed to fetch unread count:", err));
+
+        const socket = getSocket();
+        if (!socket.connected) socket.connect();
+        const handler = (payload: any) => {
+            const count = Number(payload?.count ?? 0);
+            setUnreadCount(Number.isFinite(count) ? count : 0);
+        };
+        socket.on("unreadNotificationCountUpdated", handler);
+        return () => {
+            socket.off("unreadNotificationCountUpdated", handler);
+        };
     }, []);
 
     const isAdmin =
@@ -49,6 +71,20 @@ const Sidebar = ({ isOpen }: any) => {
             icon: <FaClipboardList className="w-5 h-5" />,
             href: "/boards/view",
             match: "/boards",
+        },
+        {
+            key: "notifications",
+            label: "Notifications",
+            icon: <FaBell className="w-5 h-5" />,
+            href: "/notifications/view",
+            match: "/notifications",
+        },
+        {
+            key: "calendar",
+            label: t("main_menu.calendar"),
+            icon: <FaCalendar className="w-5 h-5" />,
+            href: "/calendar/view",
+            match: "/calendar",
         },
         {
             key: "employees",
@@ -102,6 +138,14 @@ const Sidebar = ({ isOpen }: any) => {
                             >
                                 <div className="relative z-10 transition-transform duration-300 group-hover:scale-110">
                                     {item.icon}
+                                    {item.key === "notifications" && unreadCount > 0 && (
+                                        <span
+                                            aria-label="unread-count"
+                                            className="absolute -top-1 -right-1 min-w-4 px-1 h-4 rounded-full bg-rose-600 text-white text-[10px] leading-4 font-bold text-center shadow"
+                                        >
+                                            {unreadCount > 99 ? "99+" : unreadCount}
+                                        </span>
+                                    )}
                                 </div>
 
                                 {/* Tooltip */}

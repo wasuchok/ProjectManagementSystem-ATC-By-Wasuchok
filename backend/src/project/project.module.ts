@@ -4,9 +4,10 @@ import { EventsModule } from 'src/event/events.module';
 import { PrismaService } from 'src/prisma.service';
 import { ProjectController } from './project.controller';
 import { ProjectService } from './project.service';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
-  imports: [EventsModule, JwtModule],
+  imports: [EventsModule, JwtModule, NotificationsModule],
   controllers: [ProjectController],
   providers: [ProjectService, PrismaService],
 })

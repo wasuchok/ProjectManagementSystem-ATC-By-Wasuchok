@@ -2,10 +2,11 @@
 import { CustomAlert } from "@/app/components/CustomAlertModal";
 import axios from "axios";
 import axiosInstance from "./axiosConfig";
+import { CONFIG } from "@/app/config";
 
 let isRefreshing = false;
 let failedQueue: any[] = [];
-const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://10.17.3.244:5555/api/v1";
+const baseURL = CONFIG.apiUrl;
 
 const processQueue = (error: any, token: string | null = null) => {
     failedQueue.forEach((prom) => {

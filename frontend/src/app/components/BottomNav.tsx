@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FaClipboardList, FaHome, FaSlidersH, FaUsers } from "react-icons/fa";
+import { FaClipboardList, FaHome, FaSlidersH, FaUsers, FaCalendar } from "react-icons/fa";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useUser } from "../contexts/UserContext";
 
@@ -18,6 +18,7 @@ const BottomNav = () => {
     const items = [
         { key: "home", label: t("main_menu.home"), icon: <FaHome className="w-5 h-5" />, href: "/home/view", match: "/home" },
         { key: "boards", label: t("main_menu.boards"), icon: <FaClipboardList className="w-5 h-5" />, href: "/boards/view", match: "/boards" },
+        { key: "calendar", label: t("main_menu.calendar"), icon: <FaCalendar className="w-5 h-5" />, href: "/calendar/view", match: "/calendar" },
         { key: "employees", label: t("main_menu.employees"), icon: <FaUsers className="w-5 h-5" />, href: "/employees/view", match: "/employees" },
         { key: "setting", label: t("main_menu.setting"), icon: <FaSlidersH className="w-5 h-5" />, href: "/setting", match: "/setting", onlyAdmin: true },
     ];

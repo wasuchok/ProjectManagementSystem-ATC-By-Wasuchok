@@ -30,6 +30,7 @@ interface ProjectData {
     isOwner: boolean;
 }
 
+
 const Page = () => {
 
     const router = useRouter()
@@ -147,6 +148,7 @@ const Page = () => {
             setLoading(false);
         }
     };
+
 
     const columns: Column<ProjectData>[] = [
         {
@@ -362,6 +364,7 @@ const Page = () => {
         }
     };
 
+
     return (
         <>
             <div className="space-y-4">
@@ -514,6 +517,7 @@ const Page = () => {
                     fetchAllProjectsByEmployee={fetchAllProjectsByEmployee}
                 />
             )}
+
 
         </>
     );

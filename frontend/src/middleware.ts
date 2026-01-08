@@ -12,7 +12,9 @@ export function middleware(request: NextRequest) {
         pathname.startsWith("/home") ||
         pathname.startsWith("/boards") ||
         pathname.startsWith("/employees") ||
-        pathname.startsWith("/setting");
+        pathname.startsWith("/setting") ||
+        pathname.startsWith("/calendar") ||
+        pathname.startsWith("/notifications");
 
 
     if (accessToken && refreshToken && isAuthPage) {
@@ -35,5 +37,7 @@ export const config = {
         "/boards/:path*",
         "/employees/:path*",
         "/setting/:path*",
+        "/calendar/:path*",
+        "/notifications/:path*",
     ],
 };

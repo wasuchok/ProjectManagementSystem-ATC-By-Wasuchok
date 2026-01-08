@@ -7,6 +7,7 @@ import { useUser } from "@/app/contexts/UserContext";
 import { apiPrivate } from "@/app/services/apiPrivate";
 import { encodeSingleHashid } from "@/app/utils/hashids";
 import { getImageUrl } from "@/app/utils/imagePath";
+import { CustomAlert } from "@/app/components/CustomAlertModal";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {

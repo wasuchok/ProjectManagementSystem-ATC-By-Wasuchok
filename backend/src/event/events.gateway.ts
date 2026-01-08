@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -5,25 +6,39 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway({
+  cors: {
+    origin: [
+      'http://10.17.3.244:6565',
+      'http://localhost:6565',
+      'http://127.0.0.1:6565',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ],
+    credentials: true,
+  },
+  transports: ['websocket', 'polling'],
+})
 export class EventsGateway {
   @WebSocketServer() server: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
   private readonly userSockets = new Map<string, Set<string>>();
   private readonly taskRooms = new Map<string | number, Set<string>>();
+  private readonly userUnreadCounts = new Map<string, number>();
+  private readonly socketToUser = new Map<string, string>();
+  private readonly projectMembers = new Map<string | number, Set<string>>();
 
   handleConnection(client: Socket) {
-    this.logger.debug(`Client connected ${client.id}`);
+    this.logger.log(`Client connected ${client.id}`);
   }
 
   handleDisconnect(client: Socket) {
     this.detachSocketFromUser(client.id);
     this.detachSocketFromTasks(client.id);
-    this.logger.debug(`Client disconnected ${client.id}`);
+    this.logger.log(`Client disconnected ${client.id}`);
   }
 
   @SubscribeMessage('registerUser')
@@ -35,7 +50,17 @@ export class EventsGateway {
     const sockets = this.userSockets.get(userId) ?? new Set<string>();
     sockets.add(client.id);
     this.userSockets.set(userId, sockets);
-    this.logger.debug(`Registered user ${userId} with socket ${client.id}`);
+    this.socketToUser.set(client.id, userId);
+    this.logger.log(`Registered user ${userId} with socket ${client.id}`);
+  }
+
+  @SubscribeMessage('notifications:markAllRead')
+  handleMarkAllRead(
+    @MessageBody() userId: string,
+  ) {
+    if (!userId) return;
+    this.userUnreadCounts.set(userId, 0);
+    this.sendToUser(userId, 'unreadNotificationCountUpdated', { count: 0 });
   }
 
   @SubscribeMessage('joinProject')
@@ -46,7 +71,18 @@ export class EventsGateway {
     if (!projectId) return;
     const room = this.projectRoom(projectId);
     client.join(room);
-    this.logger.debug(`Socket ${client.id} joined ${room}`);
+    this.logger.log(`Socket ${client.id} joined ${room}`);
+    const userId = this.socketToUser.get(client.id);
+    if (userId) {
+      const members = this.projectMembers.get(projectId) ?? new Set<string>();
+      members.add(userId);
+      this.projectMembers.set(projectId, members);
+      this.server.to(room).emit('project:presence:update', {
+        projectId,
+        users: Array.from(members),
+        count: members.size,
+      });
+    }
   }
 
   @SubscribeMessage('leaveProject')
@@ -57,7 +93,21 @@ export class EventsGateway {
     if (!projectId) return;
     const room = this.projectRoom(projectId);
     client.leave(room);
-    this.logger.debug(`Socket ${client.id} left ${room}`);
+    this.logger.log(`Socket ${client.id} left ${room}`);
+    const userId = this.socketToUser.get(client.id);
+    if (userId) {
+      const members = this.projectMembers.get(projectId);
+      if (members && members.delete(userId)) {
+        if (members.size === 0) {
+          this.projectMembers.delete(projectId);
+        }
+        this.server.to(room).emit('project:presence:update', {
+          projectId,
+          users: members ? Array.from(members) : [],
+          count: members ? members.size : 0,
+        });
+      }
+    }
   }
 
   @SubscribeMessage('joinTask')
@@ -143,6 +193,21 @@ export class EventsGateway {
     this.server.to(this.taskRoom(taskId)).emit(event, payload);
   }
 
+  incrementUnreadCount(userId: string, delta = 1) {
+    if (!userId) return;
+    const current = this.userUnreadCounts.get(userId) ?? 0;
+    const next = Math.max(0, current + delta);
+    this.userUnreadCounts.set(userId, next);
+    this.sendToUser(userId, 'unreadNotificationCountUpdated', { count: next });
+  }
+
+  setUnreadCount(userId: string, count: number) {
+    if (!userId) return;
+    const next = Math.max(0, Number.isFinite(count) ? count : 0);
+    this.userUnreadCounts.set(userId, next);
+    this.sendToUser(userId, 'unreadNotificationCountUpdated', { count: next });
+  }
+
   private projectRoom(projectId: string | number) {
     return `project:${projectId}`;
   }
@@ -181,6 +246,23 @@ export class EventsGateway {
       if (sockets.delete(socketId) && sockets.size === 0) {
         this.userSockets.delete(userId);
         break;
+      }
+    }
+    const user = this.socketToUser.get(socketId);
+    if (user) {
+      this.socketToUser.delete(socketId);
+      for (const [projectId, members] of this.projectMembers) {
+        if (members.delete(user)) {
+          const room = this.projectRoom(projectId);
+          this.server.to(room).emit('project:presence:update', {
+            projectId,
+            users: Array.from(members),
+            count: members.size,
+          });
+          if (members.size === 0) {
+            this.projectMembers.delete(projectId);
+          }
+        }
       }
     }
   }

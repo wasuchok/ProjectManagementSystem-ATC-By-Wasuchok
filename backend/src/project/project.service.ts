@@ -11,11 +11,14 @@ import { EventsGateway } from 'src/event/events.gateway';
 import { PrismaService } from 'src/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 
+import { NotificationsService } from 'src/notifications/notifications.service';
+
 @Injectable()
 export class ProjectService {
   constructor(
     private prisma: PrismaService,
     private eventsGateway: EventsGateway,
+    private notificationsService: NotificationsService,
   ) { }
 
   async joinByCode(userId: string | null, code?: string) {
@@ -140,6 +143,45 @@ export class ProjectService {
     };
   }
 
+  private formatProjectComment(comment: any) {
+    if (!comment) return null;
+    return {
+      id: String(comment.id),
+      projectId:
+        comment.project_id != null
+          ? String(comment.project_id)
+          : comment.projectId != null
+            ? String(comment.projectId)
+            : null,
+      userId:
+        comment.user_id != null
+          ? String(comment.user_id)
+          : comment.userId != null
+            ? String(comment.userId)
+            : null,
+      message: comment.message ?? '',
+      createdAt: comment.created_at
+        ? comment.created_at.toISOString()
+        : comment.createdAt ?? null,
+      updatedAt: comment.updated_at
+        ? comment.updated_at.toISOString()
+        : comment.updatedAt ?? null,
+      authorName:
+        comment.user_account?.full_name ??
+        comment.user_account?.fullName ??
+        comment.user_account?.username ??
+        comment.authorName ??
+        null,
+      authorRole:
+        comment.user_account?.position ??
+        comment.user_account?.role ??
+        comment.authorRole ??
+        null,
+      authorDepartment:
+        comment.user_account?.department ?? comment.authorDepartment ?? null,
+    };
+  }
+
   private formatSubtask(subtask: any) {
     if (!subtask) return null;
     return {
@@ -202,6 +244,16 @@ export class ProjectService {
               user_id: member.user_id,
               status: 'invited',
             },
+          });
+
+          // Create persistent notification
+          await this.notificationsService.create({
+            userId: member.user_id,
+            type: 'project_invite',
+            title: 'คำเชิญเข้าร่วมโปรเจกต์',
+            message: `คุณได้รับคำเชิญเข้าร่วมโปรเจกต์ ${newProject.name}`,
+            link: `/boards/view`,
+            metadata: { projectId: newProject.id, inviteCount },
           });
 
           this.eventsGateway.sendToUser(member.user_id, 'invitedCountUpdated', {
@@ -955,6 +1007,31 @@ export class ProjectService {
     // ✅ คำนวณความคืบหน้าใหม่ของ task หลัก
     await this.recalculateTaskProgress(task_id);
 
+    // ✅ ส่งอัปเดตแบบ realtime ให้สมาชิกโปรเจกต์เห็นความคืบหน้าใหม่ทันที
+    try {
+      const refreshedTask = await this.prisma.tb_project_tasks.findUnique({
+        where: { id: task_id },
+        include: {
+          tb_project_task_statuses: true,
+        },
+      });
+      if (refreshedTask && refreshedTask.project_id != null) {
+        this.eventsGateway.broadcastToProject(
+          refreshedTask.project_id,
+          'project:task:progress:updated',
+          {
+            projectId: refreshedTask.project_id,
+            taskId: refreshedTask.id,
+            progressPercent: refreshedTask.progress_percent ?? 0,
+            statusId: refreshedTask.status_id ?? null,
+            task: refreshedTask,
+          },
+        );
+      }
+    } catch (e) {
+      // swallow
+    }
+
     // ✅ เพิ่ม Log การอัปเดต
     await this.prisma.tb_project_task_logs.create({
       data: {
@@ -1137,24 +1214,157 @@ export class ProjectService {
 
     const formatted = this.formatTaskComment(created);
 
-    this.eventsGateway.broadcastToTask(task_id, 'project:task:comment:created', {
-      taskId: task_id,
-      comment: formatted,
-    });
+    if (formatted) {
+      this.eventsGateway.broadcastToTask(task_id, 'project:task:comment:created', {
+        taskId: task_id,
+        comment: formatted,
+      });
 
-    if (task.project_id != null) {
-      this.eventsGateway.broadcastToProject(
-        task.project_id,
-        'project:task:comment:created',
-        {
-          projectId: task.project_id,
-          taskId: task_id,
-          comment: formatted,
-        },
-      );
+      if (task.project_id != null) {
+        this.eventsGateway.broadcastToProject(
+          task.project_id,
+          'project:task:comment:created',
+          {
+            projectId: task.project_id,
+            taskId: task_id,
+            comment: formatted,
+          },
+        );
+
+        const members = await this.prisma.tb_project_members.findMany({
+          where: { project_id: task.project_id },
+          select: { user_id: true, status: true },
+        });
+        for (const m of members) {
+          const uid = m.user_id != null ? String(m.user_id) : null;
+          if (!uid || uid === userId) continue;
+          if ((m.status ?? tb_project_members_status.invited) === tb_project_members_status.invited) continue;
+
+          // Create persistent notification
+          await this.notificationsService.create({
+            userId: uid,
+            type: 'task_comment',
+            title: 'ความคิดเห็นใหม่ในงาน',
+            message: `${formatted.authorName || 'สมาชิก'} แสดงความคิดเห็นในงาน`,
+            link: `/boards/view_board/${task.project_id}`,
+            metadata: { projectId: task.project_id, taskId: task_id, commentId: formatted.id }
+          });
+        }
+      }
     }
 
     return new ApiResponse('สร้างความคิดเห็นสำเร็จ', 201, formatted);
+  }
+
+  async getProjectComments(project_id: number) {
+    if (!project_id) {
+      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+    }
+
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      select: { id: true },
+    });
+
+    if (!project) {
+      return new ApiResponse('ไม่พบโปรเจกต์ที่ต้องการ', 404, null);
+    }
+
+    const comments = await this.prisma.tb_project_project_comments.findMany({
+      where: { project_id },
+      orderBy: { created_at: 'asc' },
+      include: {
+        user_account: true,
+      },
+    });
+
+    return new ApiResponse(
+      'ดึงข้อมูลความคิดเห็นโปรเจกต์สำเร็จ',
+      200,
+      comments.map((comment) => this.formatProjectComment(comment)),
+    );
+  }
+
+  async createProjectComment(
+    project_id: number,
+    userId: string,
+    message: string,
+  ) {
+    if (!project_id) {
+      return new ApiResponse('กรุณาระบุโปรเจกต์', 400, null);
+    }
+    const trimmedMessage = message?.trim();
+    if (!trimmedMessage) {
+      return new ApiResponse('กรุณาระบุข้อความความคิดเห็น', 400, null);
+    }
+    if (!userId) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 401, null);
+    }
+
+    const project = await this.prisma.tb_project_projects.findUnique({
+      where: { id: project_id },
+      select: { id: true },
+    });
+
+    if (!project) {
+      return new ApiResponse('ไม่พบโปรเจกต์ที่ต้องการ', 404, null);
+    }
+
+    const user = await this.prisma.user_account.findUnique({
+      where: { user_id: userId },
+      select: { user_id: true },
+    });
+
+    if (!user) {
+      return new ApiResponse('ไม่พบข้อมูลผู้ใช้งาน', 404, null);
+    }
+
+    const created = await this.prisma.tb_project_project_comments.create({
+      data: {
+        project_id,
+        user_id: userId,
+        message: trimmedMessage,
+      },
+      include: {
+        user_account: true,
+      },
+    });
+
+    const formatted = this.formatProjectComment(created);
+
+    if (formatted) {
+      this.eventsGateway.broadcastToProject(
+        project_id,
+        'project:comment:created',
+        {
+          projectId: project_id,
+          comment: formatted,
+        },
+      );
+
+      // Persistent notifications for project members
+      const members = await this.prisma.tb_project_members.findMany({
+        where: { project_id },
+        select: { user_id: true, status: true },
+      });
+
+      for (const m of members) {
+        const uid = m.user_id != null ? String(m.user_id) : null;
+        if (!uid || uid === userId) continue;
+        if ((m.status ?? tb_project_members_status.invited) === tb_project_members_status.invited) continue;
+
+        await this.notificationsService.create({
+          userId: uid,
+          type: 'comment', // or 'project_comment'
+          title: 'ความคิดเห็นใหม่ในโปรเจกต์',
+          message: `${formatted.authorName || 'สมาชิก'} แสดงความคิดเห็นในโปรเจกต์`,
+          link: `/boards/view`, // Or specific project link if available
+          metadata: { projectId: project_id, commentId: formatted.id }
+        });
+      }
+    }
+
+    return new ApiResponse('สร้างความคิดเห็นโปรเจกต์สำเร็จ', 201, formatted);
   }
 
   async getProjectDetail(
@@ -1392,12 +1602,24 @@ export class ProjectService {
       },
     });
 
+    // Create persistent notification
+    await this.notificationsService.create({
+      userId: targetUserId,
+      type: 'project_invite',
+      title: 'คำเชิญเข้าร่วมโปรเจกต์',
+      message: `คุณได้รับคำเชิญเข้าร่วมโปรเจกต์ ${project.name}`,
+      link: `/boards/view`, // Link to invite page
+      metadata: { projectId: project.id, inviteCount },
+    });
+
     this.eventsGateway.sendToUser(targetUserId, 'invitedCountUpdated', {
       inviteCount,
       projectId: project.id,
       projectName: project.name,
       message: `คุณได้รับคำเชิญเข้าร่วมโปรเจกต์ ${project.name}`,
     });
+    // Removed incrementUnreadCount as notificationsService.create handles it
+
 
     this.eventsGateway.broadcastToProject(project_id, 'project:member:added', {
       projectId: project_id,

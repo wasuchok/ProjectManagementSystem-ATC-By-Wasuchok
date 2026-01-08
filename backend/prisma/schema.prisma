@@ -30,8 +30,10 @@ model user_account {
   tb_project_task_comments      tb_project_task_comments[]
   tb_project_task_logs          tb_project_task_logs[]
   tb_project_tasks              tb_project_tasks[]
+  tb_project_project_comments   tb_project_project_comments[]
   user_account                  user_account?                   @relation("user_accountTouser_account", fields: [create_by], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
   other_user_account            user_account[]                  @relation("user_accountTouser_account")
+  tb_notifications              tb_notifications[]
 
   @@index([create_by])
 }
@@ -53,22 +55,23 @@ model tb_project_members {
 }
 
 model tb_project_projects {
-  id                       Int                          @id @default(autoincrement())
-  join_code                String?                      @db.VarChar(20)
-  name                     String?                      @db.VarChar(255)
-  description              String?                      @db.Text
-  priority                 tb_project_projects_priority
-  status                   tb_project_projects_status
-  join_enabled             Boolean
-  progress_percent         Decimal?                     @default(0.00) @db.Decimal(5, 2)
-  completed_date           DateTime?
-  created_by               String?                      @db.Uuid
-  created_at               DateTime                     @default(now())
-  updated_at               DateTime                     @default(now())
-  tb_project_members       tb_project_members[]
-  user_account             user_account?                @relation(fields: [created_by], references: [user_id], onUpdate: SetNull)
-  tb_project_task_statuses tb_project_task_statuses[]
-  tb_project_tasks         tb_project_tasks[]
+  id                          Int                           @id @default(autoincrement())
+  join_code                   String?                       @db.VarChar(20)
+  name                        String?                       @db.VarChar(255)
+  description                 String?                       @db.Text
+  priority                    tb_project_projects_priority
+  status                      tb_project_projects_status
+  join_enabled                Boolean
+  progress_percent            Decimal?                      @default(0.00) @db.Decimal(5, 2)
+  completed_date              DateTime?
+  created_by                  String?                       @db.Uuid
+  created_at                  DateTime                      @default(now())
+  updated_at                  DateTime                      @default(now())
+  tb_project_members          tb_project_members[]
+  user_account                user_account?                 @relation(fields: [created_by], references: [user_id], onUpdate: SetNull)
+  tb_project_task_statuses    tb_project_task_statuses[]
+  tb_project_tasks            tb_project_tasks[]
+  tb_project_project_comments tb_project_project_comments[]
 
   @@index([created_by])
 }
@@ -178,6 +181,37 @@ model tb_project_task_comments {
 
   @@index([task_id])
   @@index([user_id])
+}
+
+model tb_project_project_comments {
+  id                  Int                 @id @default(autoincrement())
+  project_id          Int
+  user_id             String              @db.Uuid
+  message             String?             @db.Text
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @default(now())
+  tb_project_projects tb_project_projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user_account        user_account        @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([project_id])
+  @@index([user_id])
+}
+
+model tb_notifications {
+  id         Int      @id @default(autoincrement())
+  user_id    String   @db.Uuid
+  type       String   @db.VarChar(50)
+  title      String   @db.VarChar(255)
+  message    String?  @db.Text
+  link       String?  @db.VarChar(255)
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now())
+  metadata   Json?
+
+  user user_account @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([is_read])
 }
 
 enum tb_project_members_status {
